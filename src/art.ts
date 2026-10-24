@@ -1,5 +1,14 @@
-import { rooms, roles } from "./config";
-import { hour, type Game, type Room, type Person } from "./sim";
+import { rooms, roles, economy } from "./config";
+import {
+  hour,
+  deskLeft,
+  deskStand,
+  buttonPoint,
+  binPoint,
+  type Game,
+  type Room,
+  type Person,
+} from "./sim";
 export const ROOM_W = 240,
   FLOOR_H = 150,
   GROUND = 800;
@@ -20,6 +29,11 @@ export class Tower {
   clock = 0;
   lastGame: Game | null = null;
   lastEvent = 0;
+  popups = new Map<number, { pending: number; last: number }>();
+  pose = new Map<number, { x: number; floor: number; cycle: number }>();
+  renderedGame: Game | null = null;
+  simulationSpeed = 1;
+  currentGame: Game | null = null;
   floating: { x: number; y: number; age: number; value: number }[] = [];
   selected: number | null = null;
   buildMode = false;
@@ -105,8 +119,33 @@ export class Tower {
     this.panY = (f * 0.7 + 0.5) * FLOOR_H * this.zoom;
     this.panX = 0;
   }
-  draw(g: Game, delta: number) {
-    this.clock += delta;
+  draw(g: Game, delta: number, speed = 1) {
+    this.simulationSpeed = speed;
+    this.currentGame = g;
+    if (this.renderedGame !== g) {
+      this.pose.clear();
+      this.renderedGame = g;
+    }
+    const ids = new Set(g.staff.map((p) => p.id));
+    for (const id of this.pose.keys()) if (!ids.has(id)) this.pose.delete(id);
+    for (const p of g.staff) {
+      const prev = this.pose.get(p.id) ?? {
+        x: p.x,
+        floor: p.floor,
+        cycle: p.cycle,
+      };
+      // Frame-rate-independent easing removes fixed-step position jumps; contact poses remain exact at desks.
+      const a = 1 - Math.exp(-delta * 30);
+      const atDesk =
+        p.state === "Pushing buttons" ||
+        p.state === "Repairing computer" ||
+        p.state === "Emptying bin";
+      prev.x = atDesk ? p.x : prev.x + (p.x - prev.x) * a;
+      prev.floor += (p.floor - prev.floor) * a;
+      prev.cycle = p.cycle;
+      this.pose.set(p.id, prev);
+    }
+    this.clock += speed === 0 ? 0 : delta;
     const c = this.ctx,
       W = this.width,
       H = this.height;
@@ -228,17 +267,26 @@ export class Tower {
       this.lastGame = g;
       this.lastEvent = g.eventId;
       this.floating = [];
+      this.popups.clear();
     }
     for (const event of g.events) {
       if (event.id <= this.lastEvent) continue;
-      const r = g.rooms.find((r) => r.id === event.room);
-      if (r && event.id % 3 === 0)
+      const q = this.popups.get(event.room) ?? { pending: 0, last: -10 };
+      q.pending += event.value;
+      this.popups.set(event.room, q);
+    }
+    for (const [id, q] of this.popups) {
+      if (q.pending <= 0 || this.clock - q.last < 0.8) continue;
+      const r = g.rooms.find((r) => r.id === id);
+      if (r)
         this.floating.push({
-          x: roomX(r) + 40 + (event.id % 4) * 42,
-          y: floorY(r.floor) + 44,
+          x: roomX(r) + 115,
+          y: floorY(r.floor) + 43,
           age: 0,
-          value: event.value,
+          value: q.pending,
         });
+      q.pending = 0;
+      q.last = this.clock;
     }
     this.lastEvent = g.eventId;
     for (const f of this.floating) {
@@ -254,7 +302,7 @@ export class Tower {
       );
     }
     c.globalAlpha = 1;
-    this.floating = this.floating.filter((f) => f.age < 1.8);
+    this.floating = this.floating.filter((f) => f.age < 1.6).slice(-36);
     c.restore();
   }
   box(x: number, y: number, w: number, h: number, color: string, r = 0) {
@@ -315,7 +363,7 @@ export class Tower {
     this.plant(x + 216, y + 114);
     if (r.type === "office" || r.type === "research") {
       for (let i = 0; i < (r.type === "office" ? 4 : 3); i++) {
-        const dx = x + 14 + i * 51;
+        const dx = deskLeft(r, i);
         this.box(dx + 8, y + 95, 16, 24, "#677a78", 5);
         this.box(dx, y + 87, 47, 6, r.level > 1 ? "#6c8584" : "#9f785a", 2);
         this.box(dx + 3, y + 93, 3, 29, "#786756");
@@ -335,7 +383,73 @@ export class Tower {
         );
         this.box(dx + 23, y + 82, 4, 5, "#536d6c");
         this.box(dx + 8, y + 85, 17, 2, "#eedbaf");
-        this.ellipse(dx + 36, y + 84, 3, 2, "#dc714e");
+        const worker = this.currentGame?.staff.find(
+          (p) => p.room === r.id && p.desk === i && p.role === "worker",
+        );
+        const pressed =
+          worker?.state === "Pushing buttons" &&
+          worker.cycle >= economy.contactPhase &&
+          worker.cycle < economy.contactPhase + 0.12;
+        this.box(dx + 31, y + 82, 10, 4, "#8c5547", 2);
+        this.ellipse(
+          dx + 36,
+          y + 81 + (pressed ? 3 : 0),
+          5,
+          pressed ? 1 : 2,
+          pressed ? "#ffcf70" : "#e77250",
+        );
+        // Every paper animation follows a credited contact, never a wall-clock timer.
+        if (
+          worker &&
+          worker.state === "Pushing buttons" &&
+          worker.cycle >= economy.contactPhase
+        ) {
+          const t =
+            (worker.cycle - economy.contactPhase) / (1 - economy.contactPhase);
+          this.box(dx + 31 + t * 10, y + 69 + t * 50, 8, 5, "#fff8dc", 1);
+        }
+        const fill = Math.min(1, r.waste[i] / economy.binCapacity);
+        this.box(dx + 35, y + 118, 13, 18, "#688681", 2);
+        this.box(dx + 37, y + 134 - fill * 14, 9, fill * 14, "#f5edcf", 1);
+        this.box(dx + 34, y + 117, 15, 3, "#557770", 1);
+        if (r.waste[i] > economy.binCapacity) {
+          this.box(dx + 33, y + 113, 7, 4, "#fff1cf");
+          this.box(dx + 42, y + 111, 7, 5, "#fff1cf");
+        }
+        const cleaner = this.currentGame?.staff.find(
+          (p) =>
+            p.task?.kind === "clean" &&
+            p.task.room === r.id &&
+            p.task.desk === i &&
+            p.state === "Emptying bin",
+        );
+        if (cleaner) {
+          this.label("↻", dx + 41, y + 109, "#4b886d", 13, "center");
+          this.box(
+            dx + 32,
+            y + 138,
+            17 * (cleaner.task!.progress / economy.cleanSeconds),
+            2,
+            "#77b387",
+          );
+        }
+        const repair = this.currentGame?.staff.find(
+          (p) =>
+            p.task?.kind === "repair" &&
+            p.task.room === r.id &&
+            p.task.desk === i &&
+            p.state === "Repairing computer",
+        );
+        if (repair) {
+          this.box(dx + 11, y + 57, 28, 2, "#9f7661");
+          this.box(
+            dx + 11,
+            y + 57,
+            28 * (repair.task!.progress / economy.repairSeconds),
+            2,
+            "#f2d28b",
+          );
+        }
         if (r.broken.includes(i))
           this.label("!", dx + 24, y + 76, "#fff1d2", 13, "center");
       }
@@ -405,43 +519,138 @@ export class Tower {
     }
   }
   person(p: Person, scale = 1) {
-    const c = this.ctx;
-    const y = GROUND - p.floor * 150 - 18,
-      x = p.x;
+    const c = this.ctx,
+      pose = this.pose.get(p.id);
+    const riding = scale !== 1;
+    const x = riding ? p.x : (pose?.x ?? p.x),
+      floor = riding ? p.floor : (pose?.floor ?? p.floor);
     const walking = /Walking|Arriving|Leaving/.test(p.state);
-    const bounce = walking
-      ? Math.sin(this.clock * 11 + p.id) * 2
-      : Math.sin(this.clock * 3 + p.id) * 0.6;
+    const phase =
+      this.clock * Math.min(22, 9 * Math.sqrt(this.simulationSpeed || 1)) +
+      p.id;
+    const stride = walking ? Math.sin(phase) : 0;
+    const bob = walking ? Math.abs(stride) * 1.3 : 0;
+    const y = GROUND - floor * 150 - 22;
     c.save();
-    c.translate(x, y + bounce);
-    c.scale(scale, scale);
-    const skin = ["#e6b186", "#b77d5d", "#f3c59c", "#80563f"][p.id % 4];
-    const outfit = roles[p.role].color;
-    this.ellipse(0, 4, 9, 3, "#907b6244");
-    this.box(-5, -12, 4, 14, "#425b62", 2);
-    this.box(2, -12, 4, 14, "#425b62", 2);
-    if (walking) {
-      this.box(-5 + Math.sin(this.clock * 12) * 3, 0, 6, 3, "#334b50", 1);
-      this.box(2 - Math.sin(this.clock * 12) * 3, 0, 6, 3, "#334b50", 1);
+    c.translate(x, y - bob);
+    c.scale(scale * (walking ? p.direction : 1), scale);
+    const skin = ["#e6b186", "#b77d5d", "#f3c59c", "#80563f"][p.id % 4],
+      outfit = roles[p.role].color;
+    this.ellipse(0, 3, 9, 2, "#6f6c5144");
+    // Articulated legs: opposing stride and a grounded foot, rather than sliding rectangles.
+    const line = (points: number[][], color: string, width: number) => {
+      c.strokeStyle = color;
+      c.lineWidth = width;
+      c.lineCap = "round";
+      c.lineJoin = "round";
+      c.beginPath();
+      points.forEach(([a, b], i) => (i ? c.lineTo(a, b) : c.moveTo(a, b)));
+      c.stroke();
+    };
+    line(
+      [
+        [-4, -19],
+        [-5 + stride * 4, -10],
+        [-6 + stride * 7, 0],
+      ],
+      "#3e5960",
+      4,
+    );
+    line(
+      [
+        [3, -19],
+        [4 - stride * 4, -10],
+        [5 - stride * 7, 0],
+      ],
+      "#49646a",
+      4,
+    );
+    this.box(-9 + stride * 7, -1, 7, 3, "#30484f", 1);
+    this.box(2 - stride * 7, -1, 7, 3, "#30484f", 1);
+    this.box(-8, -44, 17, 27, outfit, 5);
+    this.box(-3, -44, 6, 6, "#f8ecd2", 1);
+    this.ellipse(0, -54, 9, 10, skin);
+    this.ellipse(-1, -61, 9, 5, ["#50443b", "#866347", "#383d3b"][p.id % 3]);
+    this.box(4, -55, 2, 2, "#374548");
+    line(
+      [
+        [4, -49],
+        [7, -49],
+      ],
+      "#9c6349",
+      1,
+    );
+    let hand = { x: 9 + stride * 5, y: -26 },
+      elbow = { x: 13, y: -32 };
+    if (p.state === "Pushing buttons") {
+      const phase = p.cycle;
+      // Anticipation -> extension -> exact contact -> short hold -> recovery.
+      let reach =
+        phase < 0.34
+          ? 0
+          : phase < economy.contactPhase
+            ? (phase - 0.34) / (economy.contactPhase - 0.34)
+            : phase < 0.77
+              ? 1
+              : 1 - (phase - 0.77) / 0.23;
+      reach = Math.max(0, Math.min(1, reach));
+      reach = reach * reach * (3 - 2 * reach);
+      const home = this.currentGame!.rooms.find((r) => r.id === p.room)!;
+      const contact = buttonPoint(home, p.desk);
+      hand = {
+        x: 9 + (contact.x - p.x - 9) * reach,
+        y: -26 + (contact.y - y + 26) * reach,
+      };
+      elbow = { x: 15, y: -32 - reach * 5 };
+    } else if (p.state === "Repairing computer") {
+      hand = { x: 2 + Math.sin(this.clock * 10) * 2, y: -62 };
+      elbow = { x: 12, y: -49 };
+      line(
+        [
+          [hand.x, hand.y - 1],
+          [hand.x + 5, hand.y - 9],
+        ],
+        "#536b70",
+        3,
+      );
+      this.ellipse(hand.x + 6, hand.y - 11, 4, 3, "#eed08e");
+    } else if (p.state === "Emptying bin") {
+      hand = { x: 15, y: -16 + Math.sin(this.clock * 8) * 3 };
+      elbow = { x: 15, y: -26 };
+      line(
+        [
+          [hand.x, hand.y],
+          [hand.x + 3, 1],
+        ],
+        "#a48656",
+        2,
+      );
+      this.box(hand.x - 2, 0, 14, 4, "#71a398", 2);
+      this.box(-17, -10, 13, 13, "#51776e", 2);
+    } else if (p.role === "janitor") {
+      line(
+        [
+          [12, -28],
+          [15, 1],
+        ],
+        "#a48656",
+        2,
+      );
+      this.box(10, 0, 12, 4, "#71a398", 2);
     }
-    this.box(-8, -31, 16, 21, outfit, 5);
-    this.box(-3, -31, 6, 5, "#eee5cf", 1);
-    this.ellipse(0, -40, 8, 10, skin);
-    this.ellipse(-1, -46, 8, 5, ["#50443b", "#866347", "#383d3b"][p.id % 3]);
-    this.box(4, -41, 2, 2, "#374548");
-    const press =
-      p.state === "Pushing buttons" ? Math.sin(this.clock * 9 + p.id) * 3 : 0;
-    this.box(5, -25, 13, -4 + press, skin, 2);
-    if (p.role === "janitor") {
-      this.box(13, -25, 2, 31, "#987a4d");
-      this.box(8, 3, 14, 4, "#679b91", 2);
-    }
+    line(
+      [
+        [6, -39],
+        [elbow.x, elbow.y],
+        [hand.x, hand.y],
+      ],
+      skin,
+      4,
+    );
+    this.ellipse(hand.x, hand.y, 2.5, 2.5, skin);
     if (p.state === "Computer broken")
-      this.label("!", 0, -59, "#b45c49", 17, "center");
-    else if (p.happy < 50) this.label("…", 0, -59, "#ac6854", 15, "center");
-    if (p.state === "Pushing buttons" && p.timer < 0.45) {
-      this.label("+$", 7, -57, "#427c62", 10);
-    }
+      this.label("!", 0, -74, "#b45c49", 17, "center");
+    else if (p.happy < 50) this.label("…", 0, -74, "#ac6854", 15, "center");
     c.restore();
   }
 }

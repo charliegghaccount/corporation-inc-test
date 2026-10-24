@@ -1,3 +1,4 @@
+import { economy } from "./config";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -22,7 +23,7 @@ test("construction bounds, costs, capacity and occupied demolition", () => {
   assert(!build(g, "office", 1, 0));
   assert(!build(g, "office", 0, -1));
   assert(build(g, "office", 0, 0));
-  assert.equal(g.cash, 1750);
+  assert.equal(g.cash, economy.startingCash - 3500);
   assert(!build(g, "office", 0, 0));
   for (let i = 0; i < 4; i++) assert(hire(g, "worker"));
   assert(!hire(g, "worker"));
@@ -40,7 +41,11 @@ test("button income is produced only by working employees, salaries reconcile", 
   assert(
     Math.abs(
       g.cash -
-        (2400 + g.report.income - g.report.salaries - g.report.construction),
+        (economy.startingCash +
+          g.report.income +
+          g.report.rewards -
+          g.report.salaries -
+          g.report.construction),
     ) < 0.001,
   );
   const n = g.presses;
@@ -70,23 +75,23 @@ test("elevator gates construction and transports finite groups to desks", () => 
 });
 test("IT visits broken studio and janitor cleans on night shift", () => {
   const g = fresh();
-  g.cash = 10000;
+  g.cash = 100000;
   build(g, "office", 0, 0);
   build(g, "maintenance", 0, 1);
   hire(g, "it");
   hire(g, "janitor");
   g.rooms[0].broken = [0];
-  g.rooms[0].dirt = 80;
+  g.rooms[0].waste = [40, 40, 40, 40];
   g.time = 80;
   run(g, 50);
   assert.equal(g.rooms[0].broken.length, 0);
   g.time = 185;
   run(g, 60);
-  assert(g.rooms[0].dirt < 20);
+  assert(g.rooms[0].waste.reduce((n, v) => n + v, 0) < 80);
 });
 test("research prerequisites, costs, upgrades and promotions are real", () => {
   const g = fresh();
-  g.cash = 10000;
+  g.cash = 100000;
   build(g, "research", 0, 0);
   hire(g, "researcher");
   g.time = 80;
@@ -127,10 +132,14 @@ test("economy: opening office remains profitable across 12 days without grants",
   run(g, 240 * 12);
   assert(g.cash > start);
   assert(g.history.length >= 12);
-  assert(g.cash < 20000);
+  assert(g.cash < 60000);
   assert(
     g.history.every(
-      (r) => Math.abs(r.net - (r.income - r.salaries - r.construction)) < 0.001,
+      (r) =>
+        Math.abs(
+          r.net -
+            (r.income + r.rewards - r.salaries - r.operating - r.construction),
+        ) < 0.001,
     ),
   );
   console.log(

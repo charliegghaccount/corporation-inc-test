@@ -26,6 +26,9 @@ import {
   demolish,
   restore,
   objectives,
+  operatingProfit,
+  productivity,
+  pressValue,
   type Game,
 } from "./sim";
 import { Tower } from "./art";
@@ -40,7 +43,7 @@ let game: Game = fresh(),
   saveStatus = "Autosave on",
   accumulator = 0;
 const app = document.querySelector<HTMLDivElement>("#app")!;
-app.innerHTML = `<canvas id="world" aria-label="Interactive office tower. Drag to pan; pinch or scroll to zoom."></canvas><header><div class="brand"><span class="brand-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 25L25 7M10 7h15v15"/></svg></span><div><small>CORPORATE CLIMB</small><strong id="company">Good Company</strong></div></div><div class="metric"><small>AVAILABLE CASH</small><strong id="cash">$2,400</strong></div><div class="metric wide"><small>TODAY’S NET</small><strong id="profit">$0</strong></div><div class="metric wide"><small>YOUR PEOPLE</small><strong id="people">0 · 82% ☺</strong></div><div class="time"><small id="day">DAY 01 · 07:00</small><div id="speeds"><button data-speed="0" aria-label="Pause">II</button><button data-speed="1" class="active">1×</button><button data-speed="2">2×</button><button data-speed="4">4×</button></div></div></header><aside class="mission"><small>THE NEXT BIG THING</small><strong id="goal">A place to begin</strong><span id="goal-sub">Build your first Button studio</span><div class="mission-line"><i id="goal-progress"></i></div></aside><div class="view-tools"><button id="up" aria-label="View upper floors">↑</button><button id="zoom-in" aria-label="Zoom in">＋</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="home-view" aria-label="Reset camera">⌂</button></div><div class="scene-caption"><span class="live-dot"></span> <span id="scene-time">A new day, a new beginning.</span></div><section id="panel" class="panel" hidden></section><div id="toast" role="status"></div><nav>${[
+app.innerHTML = `<canvas id="world" aria-label="Interactive office tower. Drag to pan; pinch or scroll to zoom."></canvas><header><div class="brand"><span class="brand-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 25L25 7M10 7h15v15"/></svg></span><div><small>CORPORATE CLIMB</small><strong id="company">Good Company</strong></div></div><div class="metric"><small>AVAILABLE CASH</small><strong id="cash">$30,000</strong></div><div class="metric wide"><small>OPERATING PROFIT</small><strong id="profit">$0</strong></div><div class="metric wide"><small>YOUR PEOPLE</small><strong id="people">0 · 82% ☺</strong></div><div class="time"><small id="day">DAY 01 · 07:00</small><div id="speeds"><button data-speed="0" aria-label="Pause">II</button><button data-speed="1" class="active">1×</button><button data-speed="2">2×</button><button data-speed="4">4×</button><button data-speed="8">8×</button><button data-speed="16">16×</button></div></div></header><aside class="mission"><small>THE NEXT BIG THING</small><strong id="goal">A place to begin</strong><span id="goal-sub">Build your first Button studio</span><div class="mission-line"><i id="goal-progress"></i></div></aside><div class="view-tools"><button id="up" aria-label="View upper floors">↑</button><button id="zoom-in" aria-label="Zoom in">＋</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="home-view" aria-label="Reset camera">⌂</button></div><div class="scene-caption"><span class="live-dot"></span> <span id="scene-time">A new day, a new beginning.</span></div><section id="panel" class="panel" hidden></section><div id="toast" role="status"></div><nav>${[
   ["build", "▦", "Build"],
   ["staff", "♙", "People"],
   ["research", "✧", "Research"],
@@ -54,7 +57,7 @@ app.innerHTML = `<canvas id="world" aria-label="Interactive office tower. Drag t
   )
   .join(
     "",
-  )}<div class="nav-note">BUILD SOMETHING<br><b>worth working for.</b></div></nav><div id="title" class="title-screen"><div class="title-card"><div class="eyebrow">THE LITTLE OFFICE TYCOON</div><h1>Corporate<br><em>Climb.</em><span>↗</span></h1><p>Good people. Bright ideas.<br>Your next big thing starts on the ground floor.</p><label for="company-name">NAME YOUR CORPORATION</label><input id="company-name" maxlength="28" value="Good Company" autocomplete="organization"><button id="new" class="primary big">Start something great <span>↗</span></button><button id="continue" class="secondary big">Continue your company</button><button id="title-settings" class="text-button">Settings & how to play</button><small class="title-footer">AN ORIGINAL OFFICE-BUILDING SIMULATION</small></div></div><div id="rotate">↻ <span>Room to grow.<small>Try landscape for the best view of your company.</small></span><button aria-label="Dismiss rotate suggestion">×</button></div>`;
+  )}<div class="nav-note">BUILD SOMETHING<br><b>worth working for.</b></div></nav><div id="title" class="title-screen"><div class="title-card"><div class="eyebrow">THE LITTLE OFFICE TYCOON</div><h1>Corporate<br><em>Climb.</em><span>↗</span></h1><p>Good people. Bright ideas.<br>Your next big thing starts on the ground floor.</p><label for="company-name">NAME YOUR CORPORATION</label><input id="company-name" maxlength="28" value="Good Company" autocomplete="organization"><button id="new" class="primary big">Start a new V2 company <span>↗</span></button><button id="continue" class="secondary big">Continue your company</button><button id="title-settings" class="text-button">Settings & how to play</button><small class="title-footer">AN ORIGINAL OFFICE-BUILDING SIMULATION</small></div></div><div id="rotate">↻ <span>Room to grow.<small>Try landscape for the best view of your company.</small></span><button aria-label="Dismiss rotate suggestion">×</button></div>`;
 const el = (id: string) => document.getElementById(id)!;
 const panel = el("panel");
 const tower = new Tower(el("world") as HTMLCanvasElement);
@@ -76,6 +79,13 @@ const existing = load();
 (el("continue") as HTMLButtonElement).disabled = !existing;
 function save() {
   try {
+    const old = localStorage.getItem(key);
+    if (
+      old &&
+      restore(old)?.message.startsWith("V1 company migrated") &&
+      !localStorage.getItem(key + ".v1-backup")
+    )
+      localStorage.setItem(key + ".v1-backup", old);
     localStorage.setItem(key, JSON.stringify(game));
     saveStatus = "Saved just now";
   } catch {
@@ -96,6 +106,12 @@ function start(g: Game) {
 }
 el("new").onclick = () => {
   if (load() && !confirm("Replace the saved company with a new game?")) return;
+  try {
+    const old = localStorage.getItem(key);
+    if (old) localStorage.setItem(key + ".previous", old);
+  } catch {
+    /* Storage failure is reported by save(). */
+  }
   start(fresh((el("company-name") as HTMLInputElement).value));
 };
 el("continue").onclick = () => {
@@ -150,7 +166,7 @@ function renderPanel() {
       )
       .join(
         "",
-      )}</div><div class="two">${button("＋ Floor · " + money(economy.floorCost + game.floors * 150), "floor")}${button("↕ Extend lift · $350", "lift")}</div><p class="footnote">${game.floors} / ${game.tech.includes("height") ? 8 : 4} floors · elevator serves ${game.liftTop + 1}. Drag the scene to reach upper floors.</p>`;
+      )}</div><div class="two">${button("＋ Floor · " + money(economy.floorCost + game.floors * economy.floorStep), "floor")}${button("↕ Extend lift · " + money(economy.liftCost), "lift")}</div><p class="footnote">${game.floors} / ${game.tech.includes("height") ? 8 : 4} floors · elevator serves ${game.liftTop + 1}. Drag the scene to reach upper floors.</p>`;
   }
   if (tab === "staff") {
     html = heading(
@@ -195,26 +211,27 @@ function renderPanel() {
         .join("");
   }
   if (tab === "finances") {
+    const r = game.report,
+      yesterday = game.history.at(-1);
     html = heading(
-      "A HEALTHY BOTTOM LINE",
+      "KNOW YOUR BUSINESS",
       "The company books",
-      "Income includes earned objective rewards. Hiring, construction, upgrades and refunds are in investments.",
+      "Operating profit = button revenue minus wages and other running costs. Investments and objective rewards are shown separately.",
     );
-    const r = game.report;
-    html += `<div class="finance-total"><small>LIFETIME BUTTON REVENUE</small><strong>${money(game.lifetime)}</strong><span>${game.presses.toLocaleString()} actual button presses</span></div><h3>Day ${game.day} · in progress</h3><div class="ledger"><span>Revenue & rewards</span><b>${money(r.income)}</b><span>Salaries</span><b>−${money(r.salaries)}</b><span>Investments (net)</span><b>−${money(r.construction)}</b><strong>Net change</strong><strong>${money(r.net)}</strong></div><h3>Previous days</h3>${
-      game.history
-        .slice()
-        .reverse()
-        .map(
-          (r) =>
-            `<div class="list-row"><b>Day ${r.day}</b><small>In ${money(r.income)} · salaries ${money(r.salaries)} · investments ${money(r.construction)}</small><strong>${money(r.net)}</strong></div>`,
-        )
-        .join("") || "<p>Your first report closes at midnight.</p>"
-    }`;
+    html += `<div class="finance-total"><small>TODAY’S OPERATING PROFIT</small><strong>${money(operatingProfit(r))}</strong><span>${game.staff.filter((p) => p.role === "worker").length} button pushers · base $${economy.pressValue.toFixed(2)} / contact</span></div><div class="ledger"><span>Button revenue today</span><b>${money(r.income)}</b><span>Wages today</span><b>−${money(r.salaries)}</b><span>Other operating expenses</span><b>−${money(r.operating)}</b><strong>Operating profit / loss</strong><strong>${money(operatingProfit(r))}</strong><span>Construction, hiring & upgrades</span><b>−${money(r.construction)}</b><span>Objective rewards</span><b>+${money(r.rewards)}</b><strong>Cash movement</strong><strong>${money(operatingProfit(r) + r.rewards - r.construction)}</strong></div><p>${r.presses} contacts today · ${game.presses.toLocaleString()} lifetime<br>Lifetime button revenue ${money(game.lifetime)}<br>Actual contact values: ${[...new Set(game.rooms.filter((r) => r.type === "office").map((r) => pressValue(game, r).toFixed(2)))].map((v) => "$" + v).join(" / ") || "$" + economy.pressValue}</p><h3>Yesterday</h3><p>${yesterday ? "Revenue " + money(yesterday.income) + " · operating " + money(operatingProfit(yesterday)) : "Your first report closes at midnight."}</p><h3>Daily history · operating results</h3>${game.history
+      .slice()
+      .reverse()
+      .map(
+        (r) =>
+          `<div class="list-row"><b>Day ${r.day}</b><small>Revenue ${money(r.income)}<br>Wages ${money(r.salaries)} · ${r.presses} contacts</small><strong>${money(operatingProfit(r))}</strong></div>`,
+      )
+      .join(
+        "",
+      )}<p class="footnote">No recurring building fee in V2. Historical V1 income includes legacy rewards; migrated cash is preserved.</p>`;
   }
   if (tab === "settings") {
     html = heading("TAKE A MOMENT", "Settings & field guide");
-    html += `<p><b>A little office. Big ambitions.</b></p><p>Build a Button studio and hire 2–4 button pushers. Their individual presses earn money between 08:00 and 18:00. Salaries continue overnight.</p><p>Build a workshop for IT repairs and night janitors. Amenities support morale. A lab unlocks research. Add floors, then extend the elevator before building upstairs.</p><p>Tap an occupied room to inspect it and manage its employees. Drag to pan; pinch or scroll to zoom. Use ↑ to see the top floor.</p><p>Progress saves every 10 seconds. No offline income. Audio is not included in this build.</p><p class="footnote">${saveStatus} · version 0.1.0</p><div class="two">${button("Save now", "save", "primary")}${button("New company", "reset")}</div>`;
+    html += `<p><b>A little office. Big ambitions.</b></p><p>New V2 companies start with $30,000. Build two Button studios, a workshop, and hire eight button pushers plus one IT technician and one janitor. Keep a payroll reserve. Their individual presses earn money between 08:00 and 18:00. Salaries continue overnight. The HUD shows operating profit; building costs are separate investments.</p><p>Build a workshop for IT repairs and night janitors. Amenities support morale. A lab unlocks research. Add floors, then extend the elevator before building upstairs.</p><p>Tap an occupied room to inspect it and manage its employees. Drag to pan; pinch or scroll to zoom. Use ↑ to see the top floor.</p><p>Progress saves every 10 seconds. No offline income. Audio is not included in this build.</p><p class="footnote">${saveStatus} · version 0.2.0 · V2</p><div class="two">${button("Save now", "save", "primary")}${button("New V2 company", "reset")}</div>`;
   }
   if (tab === "room") {
     const r = game.rooms.find((r) => r.id === selected);
@@ -229,7 +246,7 @@ function renderPanel() {
       rooms[r.type].name,
       rooms[r.type].description,
     );
-    html += `<div class="room-stats"><span>Tier <b>${r.level}</b></span><span>Cleanliness <b>${Math.round(100 - r.dirt)}%</b></span><span>Faults <b>${r.broken.length}</b></span></div><div class="two">${r.type === "office" ? button("Upgrade · " + money(450 * r.level), "upgrade:" + r.id) : ""}${button("Demolish · 35% refund", "demolish:" + r.id)}</div><h3>Assigned colleagues · ${people.length}/${rooms[r.type].capacity}</h3>${people.map((p) => `<button class="staff-row" data-action="person:${p.id}"><span class="avatar" style="background:${roles[p.role].color}">♙</span><span><b>${escape(p.name)} · Lv.${p.level}</b><small>${p.state} · ${Math.round(p.happy)}% happiness</small></span><span>→</span></button>`).join("")}${Object.entries(
+    html += `<p class="inspection">Revenue today: <b>${money(r.todayIncome)}</b> · Overall productivity: <b>${Math.round((100 * people.filter((p) => p.role === "worker").reduce((n, p) => n + productivity(game, p), 0)) / Math.max(1, people.filter((p) => p.role === "worker").length))}%</b><br>Bins: ${r.waste.map((v, i) => "Desk " + (i + 1) + ": " + Math.round(v) + "/" + economy.binCapacity).join(" · ")}<br>${r.broken.length ? r.broken.map((d) => "Computer " + (d + 1) + " broken").join(" · ") : "All equipment operational"}</p><div class="room-stats"><span>Tier <b>${r.level}</b></span><span>Bin capacity <b>${economy.binCapacity}</b></span><span>Faults <b>${r.broken.length}</b></span></div><div class="two">${r.type === "office" ? button("Upgrade · " + money(economy.upgradeCost * r.level), "upgrade:" + r.id) : ""}${button("Demolish · 35% refund", "demolish:" + r.id)}</div><h3>Assigned colleagues · ${people.length}/${rooms[r.type].capacity}</h3>${people.map((p) => `<button class="staff-row" data-action="person:${p.id}"><span class="avatar" style="background:${roles[p.role].color}">♙</span><span><b>${escape(p.name)} · Lv.${p.level}</b><small>${p.state} · ${Math.round(p.happy)}% happiness</small></span><span>→</span></button>`).join("")}${Object.entries(
       roles,
     )
       .filter(([, d]) => d.room === r.type)
@@ -249,7 +266,7 @@ function renderPanel() {
       return;
     }
     html = heading(roles[p.role].name.toUpperCase(), escape(p.name));
-    html += `<div class="profile"><span class="avatar" style="background:${roles[p.role].color}">♙</span><h3>Level ${p.level} · ${Math.round(p.happy)}% happy</h3><p>${p.state}</p><p>Salary ${money(roles[p.role].salary * (1 + (p.level - 1) * 0.45))}/day<br>Personal button presses: ${p.presses}<br>Productivity: ${Math.round((0.5 + p.happy / 200) * (1 + (p.level - 1) * 0.25) * 100)}%</p></div><div class="two">${button("Promote · $" + p.level * 240, "promote:" + p.id)}${button("Dismiss employee", "dismiss:" + p.id)}</div>`;
+    html += `<div class="profile"><span class="avatar" style="background:${roles[p.role].color}">♙</span><h3>Level ${p.level} · ${Math.round(p.happy)}% happy</h3><p>${p.state}${p.task ? "<br>Floor " + (game.rooms.find((r) => r.id === p.task!.room)!.floor + 1) + " · desk " + (p.task.desk + 1) + " · " + p.task.progress.toFixed(1) + " seconds" : ""}</p><p>Assigned: floor ${game.rooms.find((r) => r.id === p.room)!.floor + 1}, suite ${game.rooms.find((r) => r.id === p.room)!.slot + 1}, desk ${p.desk + 1}<br>Condition: ${game.rooms.find((r) => r.id === p.room)!.broken.includes(p.desk) ? "Computer broken" : "Ready"}<br>Salary ${money(roles[p.role].salary * (1 + (p.level - 1) * 0.45))}/day<br>Personal button presses: ${p.presses}<br>Productivity: ${Math.round(productivity(game, p) * 100)}%</p></div><div class="two">${button("Promote · $" + p.level * economy.promotionCost, "promote:" + p.id)}${button("Dismiss employee", "dismiss:" + p.id)}</div>`;
   }
   panel.innerHTML = html;
 }
@@ -291,6 +308,15 @@ app.addEventListener("click", (e) => {
   if (type === "person") {
     tab = "person:" + arg;
     renderPanel();
+    return;
+  }
+  if (type === "reset") {
+    save();
+    started = false;
+    tab = "";
+    renderPanel();
+    el("title").hidden = false;
+    (el("continue") as HTMLButtonElement).disabled = !load();
     return;
   }
   action(() => {
@@ -337,14 +363,6 @@ app.addEventListener("click", (e) => {
         save();
         game.message = "Your company has been saved.";
         break;
-      case "reset":
-        if (confirm("Permanently replace this company?")) {
-          game = fresh();
-          el("title").hidden = false;
-          started = false;
-          tab = "";
-        }
-        break;
     }
   });
 });
@@ -379,7 +397,8 @@ function hud() {
   el("cash").textContent = money(game.cash);
   el("cash").classList.toggle("negative", game.cash < 0);
   el("profit").textContent =
-    (game.report.net >= 0 ? "+" : "") + money(game.report.net);
+    (operatingProfit(game.report) >= 0 ? "+" : "") +
+    money(operatingProfit(game.report));
   el("people").textContent =
     game.staff.length +
     " · " +
@@ -392,7 +411,9 @@ function hud() {
   const h = hour(game);
   el("day").textContent =
     `DAY ${String(game.day).padStart(2, "0")} · ${String(Math.floor(h)).padStart(2, "0")}:${String(Math.floor((h % 1) * 60)).padStart(2, "0")}`;
-  const next = objectives.find((_, i) => !game.claimed.includes(i));
+  const next = [0, 1, 2, 3, 15, 4, 7, 8, 5, 6, 9, 10, 11, 12, 13, 14]
+    .map((i) => ({ o: objectives[i], i }))
+    .find(({ i }) => !game.claimed.includes(i))?.o;
   el("goal").textContent = next ? next[0] : "A company worth working for";
   el("goal-sub").textContent = next ? next[1] : "Keep building your story.";
   el("goal-progress").style.width =
@@ -422,7 +443,7 @@ function hud() {
 const demo = fresh("GOOD COMPANY");
 demo.floors = 3;
 demo.liftTop = 2;
-demo.cash = 100000;
+demo.cash = 200000;
 for (let f = 0; f < 3; f++)
   for (let s = 0; s < 3; s++) {
     const type: RoomType =
@@ -465,11 +486,11 @@ function frame(now: number) {
   const dt = Math.min(0.1, (now - prev) / 1000);
   prev = now;
   accumulator += dt * (started ? speed : 1);
-  while (accumulator >= 0.1) {
-    tick(started ? game : demo, 0.1);
-    accumulator -= 0.1;
+  while (accumulator >= economy.step) {
+    tick(started ? game : demo, economy.step);
+    accumulator -= economy.step;
   }
-  tower.draw(started ? game : demo, dt);
+  tower.draw(started ? game : demo, dt, started ? speed : 1);
   hudTime += dt;
   if (hudTime > 0.5 && started) {
     hud();
@@ -482,7 +503,11 @@ setInterval(() => {
   if (started) save();
 }, 10000);
 setInterval(() => {
-  if (started && ["research", "finances", "staff"].includes(tab)) {
+  if (
+    started &&
+    (["research", "finances", "staff", "room"].includes(tab) ||
+      tab.startsWith("person:"))
+  ) {
     const scroll = panel.scrollTop;
     renderPanel();
     panel.scrollTop = scroll;

@@ -1,14 +1,15 @@
 {
   "name": "corporate-climb",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
-    "test": "tsx --test src/sim.test.ts",
+    "test": "tsx --test src/*.test.ts",
     "preview": "vite preview --host 0.0.0.0",
-    "test:browser": "node tests/browser.mjs"
+    "test:browser": "node tests/browser.mjs",
+    "test:browser:v2": "tsx tests/v2-browser.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
