@@ -1,0 +1,171 @@
+export const rooms = {
+  office: {
+    name: "Button studio",
+    cost: 650,
+    capacity: 4,
+    color: "#f8d795",
+    description:
+      "Four desks. Countless possibilities. Workers earn with every button press.",
+  },
+  research: {
+    name: "Ideas lab",
+    cost: 1100,
+    capacity: 3,
+    color: "#c8bbef",
+    description: "Researchers turn curiosity into technology points.",
+  },
+  maintenance: {
+    name: "Service workshop",
+    cost: 650,
+    capacity: 3,
+    color: "#b1d5db",
+    description: "A home for technicians and the night cleaning crew.",
+  },
+  restroom: {
+    name: "Restroom",
+    cost: 450,
+    capacity: 0,
+    color: "#a6d7ce",
+    description: "Comfort on this floor reduces fatigue and improves morale.",
+  },
+  break: {
+    name: "Common room",
+    cost: 700,
+    capacity: 0,
+    color: "#ecc0a4",
+    description: "Staff visit for a proper break and return feeling better.",
+  },
+  management: {
+    name: "People & numbers",
+    cost: 1000,
+    capacity: 3,
+    color: "#e8c7d4",
+    description: "Supervisors, accountants and HR keep the business healthy.",
+  },
+};
+export type RoomType = keyof typeof rooms;
+export const roles = {
+  worker: {
+    name: "Button pusher",
+    room: "office",
+    cost: 140,
+    salary: 28,
+    color: "#e98254",
+  },
+  researcher: {
+    name: "Researcher",
+    room: "research",
+    cost: 250,
+    salary: 40,
+    color: "#9c80d0",
+  },
+  it: {
+    name: "IT technician",
+    room: "maintenance",
+    cost: 220,
+    salary: 36,
+    color: "#438d9c",
+  },
+  janitor: {
+    name: "Janitor",
+    room: "maintenance",
+    cost: 160,
+    salary: 26,
+    color: "#729b69",
+  },
+  supervisor: {
+    name: "Supervisor",
+    room: "management",
+    cost: 300,
+    salary: 48,
+    color: "#cf9d39",
+  },
+  accountant: {
+    name: "Accountant",
+    room: "management",
+    cost: 300,
+    salary: 42,
+    color: "#6689b4",
+  },
+  hr: {
+    name: "HR partner",
+    room: "management",
+    cost: 250,
+    salary: 38,
+    color: "#c97ca0",
+  },
+} as const;
+export type Role = keyof typeof roles;
+export const techs = [
+  {
+    id: "keys",
+    name: "Better buttons",
+    cost: 35,
+    requires: "",
+    description: "+20% revenue per press",
+  },
+  {
+    id: "promote",
+    name: "Career ladders",
+    cost: 45,
+    requires: "",
+    description: "Unlock staff promotions",
+  },
+  {
+    id: "desks",
+    name: "Ergonomic desks",
+    cost: 55,
+    requires: "keys",
+    description: "Unlock level 2 studios",
+  },
+  {
+    id: "height",
+    name: "Bigger ambitions",
+    cost: 65,
+    requires: "",
+    description: "Build up to 8 floors instead of 4",
+  },
+  {
+    id: "lift",
+    name: "Express elevator",
+    cost: 65,
+    requires: "height",
+    description: "Double lift speed and capacity",
+  },
+  {
+    id: "comfort",
+    name: "People first",
+    cost: 60,
+    requires: "promote",
+    description: "+10 target happiness",
+  },
+  {
+    id: "specialists",
+    name: "Expert training",
+    cost: 80,
+    requires: "promote",
+    description: "Specialists work 50% faster",
+  },
+  {
+    id: "deluxe",
+    name: "Executive studios",
+    cost: 110,
+    requires: "desks",
+    description: "Unlock level 3 studios",
+  },
+  {
+    id: "reliable",
+    name: "Reliable hardware",
+    cost: 80,
+    requires: "keys",
+    description: "Halve equipment breakdowns",
+  },
+];
+export const economy = {
+  startingCash: 2400,
+  daySeconds: 240,
+  pressSeconds: 2.8,
+  pressValue: 3.2,
+  floorCost: 650,
+  liftCost: 350,
+};
