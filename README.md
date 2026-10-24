@@ -36,6 +36,8 @@ Simulation tests exercise placement/capacity, real work revenue, salary reconcil
 
 The Vite base is `/corporation-inc-test/`. `.github/workflows/deploy.yml` tests and builds pushes to `main`, then deploys the build artifact using GitHub Pages Actions.
 
+The first remote workflow reached `actions/configure-pages` and failed with `Get Pages site failed: Not Found`, confirming Pages was not enabled. The public host and GitHub API were blocked from this cloud network; the run annotation was inspected through the public GitHub Actions page.
+
 In repository **Settings → Pages → Build and deployment → Source**, select **GitHub Actions**. If required, run **Test and deploy Corporate Climb** from the Actions tab after enabling Pages. The expected Pages address is `https://charliegghaccount.github.io/corporation-inc-test/`; this is an expected address, not a verified deployment.
 
 ## Structure and V1 limitations

@@ -922,3 +922,21 @@ h1 > span {
     transition: none !important;
   }
 }
+
+.brand-icon svg {
+  width: 30px;
+  height: 30px;
+  margin-top: 6px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+@media (max-height: 540px) and (orientation: landscape) {
+  .brand-icon svg {
+    width: 24px;
+    height: 24px;
+    margin-top: 5px;
+  }
+}

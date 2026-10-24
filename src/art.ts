@@ -18,6 +18,9 @@ export class Tower {
   width = 0;
   height = 0;
   clock = 0;
+  lastGame: Game | null = null;
+  lastEvent = 0;
+  floating: { x: number; y: number; age: number; value: number }[] = [];
   selected: number | null = null;
   buildMode = false;
   pointer = new Map<number, { x: number; y: number }>();
@@ -221,6 +224,37 @@ export class Tower {
       10,
       "center",
     );
+    if (this.lastGame !== g) {
+      this.lastGame = g;
+      this.lastEvent = g.eventId;
+      this.floating = [];
+    }
+    for (const event of g.events) {
+      if (event.id <= this.lastEvent) continue;
+      const r = g.rooms.find((r) => r.id === event.room);
+      if (r && event.id % 3 === 0)
+        this.floating.push({
+          x: roomX(r) + 40 + (event.id % 4) * 42,
+          y: floorY(r.floor) + 44,
+          age: 0,
+          value: event.value,
+        });
+    }
+    this.lastEvent = g.eventId;
+    for (const f of this.floating) {
+      f.age += delta;
+      c.globalAlpha = Math.max(0, 1 - f.age / 1.8);
+      this.label(
+        "+$" + f.value.toFixed(1),
+        f.x,
+        f.y - f.age * 22,
+        "#347b57",
+        13,
+        "center",
+      );
+    }
+    c.globalAlpha = 1;
+    this.floating = this.floating.filter((f) => f.age < 1.8);
     c.restore();
   }
   box(x: number, y: number, w: number, h: number, color: string, r = 0) {

@@ -40,7 +40,7 @@ let game: Game = fresh(),
   saveStatus = "Autosave on",
   accumulator = 0;
 const app = document.querySelector<HTMLDivElement>("#app")!;
-app.innerHTML = `<canvas id="world" aria-label="Interactive office tower. Drag to pan; pinch or scroll to zoom."></canvas><header><div class="brand"><span class="brand-icon">↗</span><div><small>CORPORATE CLIMB</small><strong id="company">Good Company</strong></div></div><div class="metric"><small>AVAILABLE CASH</small><strong id="cash">$2,400</strong></div><div class="metric wide"><small>TODAY’S NET</small><strong id="profit">$0</strong></div><div class="metric wide"><small>YOUR PEOPLE</small><strong id="people">0 · 82% ☺</strong></div><div class="time"><small id="day">DAY 01 · 07:00</small><div id="speeds"><button data-speed="0" aria-label="Pause">Ⅱ</button><button data-speed="1" class="active">1×</button><button data-speed="2">2×</button><button data-speed="4">4×</button></div></div></header><aside class="mission"><small>THE NEXT BIG THING</small><strong id="goal">A place to begin</strong><span id="goal-sub">Build your first Button studio</span><div class="mission-line"><i id="goal-progress"></i></div></aside><div class="view-tools"><button id="up" aria-label="View upper floors">↑</button><button id="zoom-in" aria-label="Zoom in">＋</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="home-view" aria-label="Reset camera">⌂</button></div><div class="scene-caption"><span class="live-dot"></span> <span id="scene-time">A new day, a new beginning.</span></div><section id="panel" class="panel" hidden></section><div id="toast" role="status"></div><nav>${[
+app.innerHTML = `<canvas id="world" aria-label="Interactive office tower. Drag to pan; pinch or scroll to zoom."></canvas><header><div class="brand"><span class="brand-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 25L25 7M10 7h15v15"/></svg></span><div><small>CORPORATE CLIMB</small><strong id="company">Good Company</strong></div></div><div class="metric"><small>AVAILABLE CASH</small><strong id="cash">$2,400</strong></div><div class="metric wide"><small>TODAY’S NET</small><strong id="profit">$0</strong></div><div class="metric wide"><small>YOUR PEOPLE</small><strong id="people">0 · 82% ☺</strong></div><div class="time"><small id="day">DAY 01 · 07:00</small><div id="speeds"><button data-speed="0" aria-label="Pause">II</button><button data-speed="1" class="active">1×</button><button data-speed="2">2×</button><button data-speed="4">4×</button></div></div></header><aside class="mission"><small>THE NEXT BIG THING</small><strong id="goal">A place to begin</strong><span id="goal-sub">Build your first Button studio</span><div class="mission-line"><i id="goal-progress"></i></div></aside><div class="view-tools"><button id="up" aria-label="View upper floors">↑</button><button id="zoom-in" aria-label="Zoom in">＋</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="home-view" aria-label="Reset camera">⌂</button></div><div class="scene-caption"><span class="live-dot"></span> <span id="scene-time">A new day, a new beginning.</span></div><section id="panel" class="panel" hidden></section><div id="toast" role="status"></div><nav>${[
   ["build", "▦", "Build"],
   ["staff", "♙", "People"],
   ["research", "✧", "Research"],
@@ -86,6 +86,8 @@ function save() {
 function start(g: Game) {
   game = g;
   started = true;
+  tab = "";
+  renderPanel();
   el("title").hidden = true;
   speed = 1;
   lastMessage = "";
@@ -123,6 +125,7 @@ function heading(kicker: string, title: string, desc = "") {
 }
 function renderPanel() {
   panel.hidden = !tab;
+  panel.style.zIndex = started ? "3" : "9";
   document
     .querySelectorAll("[data-tab]")
     .forEach((b) =>
