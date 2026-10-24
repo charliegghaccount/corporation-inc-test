@@ -10,7 +10,7 @@ export const rooms = {
   research: {
     name: "Ideas lab",
     cost: 5000,
-    capacity: 3,
+    capacity: 4,
     color: "#c8bbef",
     description: "Researchers turn curiosity into technology points.",
   },
@@ -41,6 +41,57 @@ export const rooms = {
     capacity: 3,
     color: "#e8c7d4",
     description: "Supervisors, accountants and HR keep the business healthy.",
+  },
+  cafeteria: {
+    name: "Cafeteria",
+    cost: 2600,
+    capacity: 0,
+    color: "#e9c292",
+    description:
+      "Four eating positions. Shorter lunch trips and hunger recovery.",
+  },
+  gym: {
+    name: "Wellness gym",
+    cost: 3500,
+    capacity: 0,
+    color: "#b9cddd",
+    description: "Three exercise stations restore energy and happiness.",
+  },
+  supervisor: {
+    name: "Supervisor office",
+    cost: 3000,
+    capacity: 4,
+    color: "#d9c188",
+    description: "A base for supervisors. Longer motivation boosts.",
+  },
+  accounting: {
+    name: "Accounting office",
+    cost: 3200,
+    capacity: 4,
+    color: "#b7ced8",
+    description:
+      "Working accountants contribute a capped, transparent revenue bonus.",
+  },
+  hr: {
+    name: "HR office",
+    cost: 3000,
+    capacity: 4,
+    color: "#dfbbca",
+    description: "HR visits unhappy employees for individual support.",
+  },
+  it: {
+    name: "Advanced IT office",
+    cost: 3500,
+    capacity: 4,
+    color: "#a9cdd1",
+    description: "Technicians repair 25% faster from this base.",
+  },
+  cleaning: {
+    name: "Cleaning depot",
+    cost: 2800,
+    capacity: 4,
+    color: "#bfd3ac",
+    description: "Janitors complete cleaning tasks 25% faster.",
   },
 };
 export type RoomType = keyof typeof rooms;
@@ -161,6 +212,94 @@ export const techs = [
     description: "Halve equipment breakdowns",
   },
 ];
+export const grid = { slots: 5, width: 240, left: 365, center: 930 };
+export const facilityUnlock: Partial<Record<RoomType, string>> = {
+  restroom: "wc",
+  cafeteria: "food",
+  gym: "gym",
+  supervisor: "leadership",
+  accounting: "accounts",
+  hr: "hrteam",
+  it: "itbase",
+  cleaning: "cleanbase",
+};
+export const compatible = (role: Role, type: RoomType) =>
+  type === roles[role].room ||
+  (
+    {
+      it: "it",
+      janitor: "cleaning",
+      supervisor: "supervisor",
+      accountant: "accounting",
+      hr: "hr",
+    } as Partial<Record<Role, RoomType>>
+  )[role] === type;
+export const decorations = {
+  plant: { name: "Planter", cost: 350, happy: 3 },
+  art: { name: "Wall art", cost: 500, happy: 4 },
+  water: { name: "Water cooler", cost: 600, happy: 2 },
+};
+techs.push(
+  ...[
+    ["wc", "Indoor plumbing", 8, "", "Unlock restrooms"],
+    ["food", "Lunch on site", 18, "wc", "Unlock cafeterias"],
+    ["gym", "Wellness programme", 65, "food", "Unlock gyms"],
+    ["leadership", "Team leaders", 30, "promote", "Unlock Supervisor offices"],
+    ["accounts", "Financial practice", 35, "keys", "Unlock Accounting offices"],
+    ["hrteam", "Personal support", 40, "promote", "Unlock HR offices"],
+    ["itbase", "Technical hub", 45, "reliable", "Unlock faster IT offices"],
+    [
+      "cleanbase",
+      "Cleaning logistics",
+      40,
+      "wc",
+      "Unlock faster cleaning depots",
+    ],
+    [
+      "lab",
+      "Focused discovery",
+      75,
+      "keys",
+      "Researchers generate 25% more points",
+    ],
+    ["decor", "Comfortable surroundings", 20, "wc", "Unlock room decorations"],
+    [
+      "motivation",
+      "Inspiring leadership",
+      90,
+      "leadership",
+      "Motivation is 25% instead of 15%",
+    ],
+    [
+      "duration",
+      "Lasting encouragement",
+      100,
+      "motivation",
+      "Motivation lasts 60 instead of 40 seconds",
+    ],
+    [
+      "liftcap",
+      "Room for everyone",
+      80,
+      "lift",
+      "Elevator capacity increases to 9",
+    ],
+    [
+      "liftspeed",
+      "Smooth journeys",
+      95,
+      "lift",
+      "Elevator speed increases 35%",
+    ],
+    ["service", "Quick service", 75, "food", "Facilities work 25% faster"],
+  ].map(([id, name, cost, requires, description]) => ({
+    id: String(id),
+    name: String(name),
+    cost: Number(cost),
+    requires: String(requires),
+    description: String(description),
+  })),
+);
 export const economy = {
   startingCash: 30000,
   daySeconds: 240,

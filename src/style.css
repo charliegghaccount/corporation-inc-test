@@ -988,3 +988,79 @@ h1 > span {
     font-size: 16px;
   }
 }
+
+.room-toolbar {
+  position: sticky;
+  top: -24px;
+  background: #fffaf1;
+  z-index: 2;
+  padding: 12px 0;
+  display: grid;
+  gap: 8px;
+}
+.room-toolbar small {
+  display: block;
+}
+.employee-actions {
+  display: flex;
+  gap: 8px;
+  position: sticky;
+  top: -24px;
+  background: #fffaf1;
+  padding: 12px 0;
+  z-index: 2;
+}
+.needs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+.needs label {
+  font-size: 11px;
+}
+.needs b {
+  float: right;
+}
+.needs progress {
+  display: block;
+  width: 100%;
+  height: 7px;
+  accent-color: #669580;
+  margin-top: 5px;
+}
+.staff-row {
+  min-height: 59px;
+}
+.panel .two {
+  flex-wrap: wrap;
+}
+.panel .two button {
+  min-width: 90px;
+}
+.room-toolbar button {
+  min-height: 44px;
+}
+
+.roster-scroll {
+  max-height: 240px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.tech > button {
+  min-width: 82px;
+}
+.room-toolbar > small {
+  min-height: 14px;
+}
+
+.research-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  position: sticky;
+  top: -24px;
+  background: #fffaf1;
+  padding: 10px 0;
+  z-index: 2;
+}

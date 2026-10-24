@@ -1,4 +1,4 @@
-import { rooms, roles, economy } from "./config";
+import { rooms, roles, economy, grid } from "./config";
 import {
   hour,
   deskLeft,
@@ -185,15 +185,15 @@ export class Tower {
     c.scale(this.zoom, this.zoom);
     c.translate(-690, -GROUND);
     // Trees, pavement, sign and tower shell.
-    this.box(170, GROUND + 14, 1070, 18, "#85978a", 5);
-    for (const x of [215, 1190]) {
+    this.box(170, GROUND + 14, 1550, 18, "#85978a", 5);
+    for (const x of [215, 1670]) {
       this.box(x, GROUND - 40, 10, 55, "#857766");
       this.ellipse(x + 5, GROUND - 63, 32, 42, "#699583");
       this.ellipse(x - 11, GROUND - 48, 24, 28, "#7da88c");
     }
     const top = floorY(g.floors - 1);
-    this.box(303, top - 15, 795, g.floors * FLOOR_H + 23, "#24484c", 7);
-    this.box(310, top - 21, 795, 12, "#edf0df", 3);
+    this.box(303, top - 15, 1275, g.floors * FLOOR_H + 23, "#24484c", 7);
+    this.box(310, top - 21, 1275, 12, "#edf0df", 3);
     this.box(312, top, 45, g.floors * FLOOR_H, "#597579");
     for (let f = 0; f < g.floors; f++) {
       const y = floorY(f);
@@ -206,7 +206,7 @@ export class Tower {
       c.lineTo(344, y + 145);
       c.stroke();
       this.label(String(f + 1).padStart(2, "0"), 286, y + 76, "#4d7777", 14);
-      for (let s = 0; s < 3; s++) {
+      for (let s = 0; s < grid.slots; s++) {
         const r = g.rooms.find((r) => r.floor === f && r.slot === s);
         if (r) this.room(r, night);
         else {
@@ -227,7 +227,7 @@ export class Tower {
           );
         }
       }
-      this.box(357, y + 142, 738, 8, "#3b5a59");
+      this.box(357, y + 142, 1218, 8, "#3b5a59");
     }
     const ly = GROUND - (g.lift.y + 1) * 150 + 41;
     this.box(316, ly, 36, 96, "#db9a56", 3);
@@ -244,7 +244,13 @@ export class Tower {
     this.box(555, top - 63, 360, 41, "#285557", 7);
     this.label(g.name.toUpperCase(), 735, top - 37, "#f9e8b2", 17, "center");
     for (const p of g.staff) {
-      if (p.state === "Off shift" || p.state === "Riding elevator") continue;
+      if (
+        p.state === "Off shift" ||
+        p.state.startsWith("Off-site") ||
+        p.state === "Using restroom" ||
+        p.state === "Riding elevator"
+      )
+        continue;
       this.person(p);
     }
     const visible = g.staff.filter((p) => p.state === "Riding elevator");
@@ -361,8 +367,8 @@ export class Tower {
     }
     this.label(rooms[r.type].name.toUpperCase(), x + 12, y + 17, "#685d50", 8);
     this.plant(x + 216, y + 114);
-    if (r.type === "office" || r.type === "research") {
-      for (let i = 0; i < (r.type === "office" ? 4 : 3); i++) {
+    if (["office", "research", "accounting"].includes(r.type)) {
+      for (let i = 0; i < 4; i++) {
         const dx = deskLeft(r, i);
         this.box(dx + 8, y + 95, 16, 24, "#677a78", 5);
         this.box(dx, y + 87, 47, 6, r.level > 1 ? "#6c8584" : "#9f785a", 2);
@@ -474,15 +480,66 @@ export class Tower {
       this.label("☕", x + 153, y + 100, "#fff2d1", 15);
       this.ellipse(x + 88, y + 107, 19, 5, "#f6e1b7");
     }
+    if (r.type === "cafeteria") {
+      for (let i = 0; i < 4; i++) {
+        const dx = x + 15 + i * 48;
+        this.box(dx, y + 89, 38, 7, "#a47b53", 3);
+        this.box(dx + 4, y + 96, 3, 23, "#8c7054");
+        this.ellipse(dx + 20, y + 86, 10, 4, "#f5edd9");
+        this.box(dx + 3, y + 105, 16, 15, "#b47e59", 3);
+      }
+    }
+    if (r.type === "gym") {
+      for (let i = 0; i < 3; i++) {
+        const dx = x + 20 + i * 65;
+        this.box(dx, y + 113, 48, 7, "#557b87", 4);
+        this.box(dx + 39, y + 72, 4, 44, "#698993");
+        this.box(dx + 24, y + 72, 22, 5, "#385d66", 3);
+        this.box(dx + 25, y + 98, 3, 16, "#698993");
+      }
+    }
+    for (const d of r.decor) {
+      if (d === "plant") this.plant(x + 8, y + 112);
+      if (d === "art") {
+        this.box(x + 108, y + 28, 27, 25, "#9c7953", 2);
+        this.box(x + 111, y + 31, 21, 19, "#ead69c");
+        this.label("♥", x + 117, y + 45, "#b9785a", 12);
+      }
+      if (d === "water") {
+        this.box(x + 205, y + 77, 18, 31, "#f0e8d2", 3);
+        this.box(x + 208, y + 64, 12, 16, "#86bdc8", 3);
+      }
+    }
     if (r.type === "restroom") {
       for (let i = 0; i < 3; i++) {
         this.box(x + 15 + i * 65, y + 36, 51, 76, "#78ada7", 3);
-        this.box(x + 20 + i * 65, y + 41, 41, 65, "#a4cebf", 2);
+        const occupied = this.currentGame?.staff.some(
+          (p) =>
+            p.visit?.room === r.id &&
+            p.visit.seat === i &&
+            p.state === "Using restroom",
+        );
+        this.box(
+          x + 20 + i * 65,
+          y + 41,
+          41,
+          65,
+          occupied ? "#789d94" : "#a4cebf",
+          2,
+        );
+        this.box(
+          x + 34 + i * 65,
+          y + 49,
+          10,
+          4,
+          occupied ? "#d98464" : "#e3d6a1",
+          1,
+        );
         this.ellipse(x + 51 + i * 65, y + 77, 2, 2, "#fff0ca");
       }
       this.label("WC", x + 110, y + 29, "#43706e", 12);
     }
-    if (r.type === "maintenance") {
+    if (["maintenance", "it", "cleaning"].includes(r.type)) {
       this.box(x + 17, y + 49, 83, 56, "#6d999c", 3);
       for (let i = 0; i < 4; i++)
         this.box(x + 22, y + 56 + i * 11, 71, 3, "#b9d4cc");
@@ -492,7 +549,7 @@ export class Tower {
       this.box(x + 143, y + 50, 21, 26, "#e0ae5b", 2);
       this.label("⚒", x + 148, y + 70, "#5d6b62", 16);
     }
-    if (r.type === "management") {
+    if (["management", "supervisor", "hr"].includes(r.type)) {
       this.box(x + 37, y + 85, 134, 9, "#a27655", 4);
       this.box(x + 45, y + 94, 5, 29, "#7f694e");
       this.box(x + 160, y + 94, 5, 29, "#7f694e");
@@ -580,8 +637,42 @@ export class Tower {
       "#9c6349",
       1,
     );
+    if (p.level > 1)
+      this.label("★".repeat(p.level - 1), 0, -75, "#cb9840", 10, "center");
+    if (p.boost > 0) this.label("↑", 12, -73, "#4c9478", 15, "center");
+    if (p.state === "Motivating") {
+      const swing = Math.sin(
+        Math.min(1, (p.social?.progress ?? 0) / 2) * Math.PI,
+      );
+      line(
+        [
+          [8, -37],
+          [20 - (1 - swing) * 16, -54 - (1 - swing) * 16],
+        ],
+        "#ab7947",
+        3,
+      );
+      this.label("✧", 36, -48, "#edba55", 15, "center");
+    }
+    if (p.state === "HR conversation") {
+      this.label("☺", 14, -76, "#ae7698", 15, "center");
+    }
     let hand = { x: 9 + stride * 5, y: -26 },
       elbow = { x: 13, y: -32 };
+    if (
+      ["Eating", "Resting", "Exercising", "Researching", "Accounting"].includes(
+        p.state,
+      )
+    ) {
+      hand = {
+        x: 18,
+        y:
+          p.state === "Exercising"
+            ? -50 + Math.sin(this.clock * 5) * 15
+            : -37 + Math.sin(this.clock * 5) * 3,
+      };
+      if (p.state === "Eating") this.ellipse(18, -37, 5, 3, "#d7a361");
+    }
     if (p.state === "Pushing buttons") {
       const phase = p.cycle;
       // Anticipation -> extension -> exact contact -> short hold -> recovery.

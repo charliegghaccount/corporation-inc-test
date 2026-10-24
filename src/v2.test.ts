@@ -244,7 +244,7 @@ test("V1 migration preserves cash, faults, staff and progression without a cash 
   const migrated = restore(JSON.stringify(g))!;
   assert(migrated);
   assert.equal(migrated.cash, 83);
-  assert.equal(migrated.version, 2);
+  assert.equal(migrated.version, 3);
   assert.deepEqual(migrated.rooms[0].broken, [2]);
   assert.equal(migrated.staff.length, 4);
   assert(migrated.rooms[0].waste[0] > 0);

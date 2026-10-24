@@ -6,6 +6,10 @@ import "@fontsource/outfit/latin-700.css";
 import "./style.css";
 import {
   rooms,
+  grid,
+  compatible,
+  decorations,
+  facilityUnlock,
   roles,
   techs,
   economy,
@@ -14,6 +18,8 @@ import {
 } from "./config";
 import {
   fresh,
+  relocate,
+  decorate,
   tick,
   hour,
   hire,
@@ -32,6 +38,20 @@ import {
   type Game,
 } from "./sim";
 import { Tower } from "./art";
+let researchGroup = "all";
+const category = (id: string) =>
+  ["height", "lift", "liftcap", "liftspeed"].includes(id)
+    ? "Transport"
+    : [
+          "promote",
+          "leadership",
+          "hrteam",
+          "specialists",
+          "motivation",
+          "duration",
+        ].includes(id)
+      ? "Personnel"
+      : "Facilities";
 const key = "corporate-climb-v1";
 let game: Game = fresh(),
   speed = 1,
@@ -57,7 +77,7 @@ app.innerHTML = `<canvas id="world" aria-label="Interactive office tower. Drag t
   )
   .join(
     "",
-  )}<div class="nav-note">BUILD SOMETHING<br><b>worth working for.</b></div></nav><div id="title" class="title-screen"><div class="title-card"><div class="eyebrow">THE LITTLE OFFICE TYCOON</div><h1>Corporate<br><em>Climb.</em><span>↗</span></h1><p>Good people. Bright ideas.<br>Your next big thing starts on the ground floor.</p><label for="company-name">NAME YOUR CORPORATION</label><input id="company-name" maxlength="28" value="Good Company" autocomplete="organization"><button id="new" class="primary big">Start a new V2 company <span>↗</span></button><button id="continue" class="secondary big">Continue your company</button><button id="title-settings" class="text-button">Settings & how to play</button><small class="title-footer">AN ORIGINAL OFFICE-BUILDING SIMULATION</small></div></div><div id="rotate">↻ <span>Room to grow.<small>Try landscape for the best view of your company.</small></span><button aria-label="Dismiss rotate suggestion">×</button></div>`;
+  )}<div class="nav-note">BUILD SOMETHING<br><b>worth working for.</b></div></nav><div id="title" class="title-screen"><div class="title-card"><div class="eyebrow">THE LITTLE OFFICE TYCOON</div><h1>Corporate<br><em>Climb.</em><span>↗</span></h1><p>Good people. Bright ideas.<br>Your next big thing starts on the ground floor.</p><label for="company-name">NAME YOUR CORPORATION</label><input id="company-name" maxlength="28" value="Good Company" autocomplete="organization"><button id="new" class="primary big">Start a new V3 company <span>↗</span></button><button id="continue" class="secondary big">Continue your company</button><button id="title-settings" class="text-button">Settings & how to play</button><small class="title-footer">AN ORIGINAL OFFICE-BUILDING SIMULATION</small></div></div><div id="rotate">↻ <span>Room to grow.<small>Try landscape for the best view of your company.</small></span><button aria-label="Dismiss rotate suggestion">×</button></div>`;
 const el = (id: string) => document.getElementById(id)!;
 const panel = el("panel");
 const tower = new Tower(el("world") as HTMLCanvasElement);
@@ -80,12 +100,16 @@ const existing = load();
 function save() {
   try {
     const old = localStorage.getItem(key);
+    let legacyVersion = 0;
+    try {
+      legacyVersion = old ? JSON.parse(old).version : 0;
+    } catch {}
     if (
       old &&
-      restore(old)?.message.startsWith("V1 company migrated") &&
-      !localStorage.getItem(key + ".v1-backup")
+      [1, 2].includes(legacyVersion) &&
+      !localStorage.getItem(key + ".v" + legacyVersion + "-backup")
     )
-      localStorage.setItem(key + ".v1-backup", old);
+      localStorage.setItem(key + ".v" + legacyVersion + "-backup", old);
     localStorage.setItem(key, JSON.stringify(game));
     saveStatus = "Saved just now";
   } catch {
@@ -157,12 +181,12 @@ function renderPanel() {
     html = heading(
       "MAKE ROOM FOR POSSIBILITY",
       "Build your company",
-      "Choose a room, then tap an empty plot in the tower. Three rooms fit on each floor.",
+      "Choose a room, then tap an empty plot in the tower. Five full-size rooms fit on each floor; the elevator is separate.",
     );
     html += `<div class="cards">${Object.entries(rooms)
       .map(
         ([id, r]) =>
-          `<button class="room-card ${buildType === id ? "chosen" : ""}" data-action="choose:${id}"><span class="room-swatch" style="background:${r.color}">${{ office: "▤", research: "✧", maintenance: "⚒", restroom: "WC", break: "☕", management: "↗" }[id as RoomType]}</span><span><b>${r.name}</b><small>${r.description}</small></span><strong>${money(r.cost)}</strong></button>`,
+          `<button class="room-card ${buildType === id ? "chosen" : ""}" data-action="choose:${id}"><span class="room-swatch" style="background:${r.color}">${{ office: "▤", research: "✧", maintenance: "⚒", restroom: "WC", break: "☕", management: "↗", cafeteria: "☕", gym: "♥", supervisor: "⚑", accounting: "▥", hr: "☺", it: "⚒", cleaning: "↻" }[id as RoomType]}</span><span><b>${r.name}</b><small>${r.description}${facilityUnlock[id as RoomType] && !game.tech.includes(facilityUnlock[id as RoomType]!) ? " · Research: " + techs.find((t) => t.id === facilityUnlock[id as RoomType])!.name : ""}</small></span><strong>${money(r.cost)}</strong></button>`,
       )
       .join(
         "",
@@ -177,11 +201,11 @@ function renderPanel() {
     html += `<div class="cards">${Object.entries(roles)
       .map(
         ([id, r]) =>
-          `<div class="list-row"><span class="avatar" style="background:${r.color}">♙</span><div><b>${r.name}</b><small>${rooms[r.room].name} · $${r.salary}/day</small></div>${button("$" + r.cost + " +", "hire:" + id)}</div>`,
+          `<div class="list-row"><span class="avatar" style="background:${r.color}">♙</span><div><b>${r.name}</b><small>${rooms[r.room].name} · $${r.salary}/day</small></div>${button("$" + r.cost + " +", "hire:" + id, "secondary", !game.rooms.some((room) => compatible(id as Role, room.type) && game.staff.filter((p) => p.room === room.id).length < rooms[room.type].capacity))}</div>`,
       )
       .join(
         "",
-      )}</div><h3>On the payroll · ${game.staff.length}</h3>${game.staff.map((p) => `<button class="staff-row" data-action="person:${p.id}"><span class="avatar" style="background:${roles[p.role].color}">♙</span><span><b>${escape(p.name)}</b><small>${roles[p.role].name} · ${p.state}</small></span><span>${Math.round(p.happy)}% ☺</span></button>`).join("") || "<p>No colleagues yet. Build a studio to get started.</p>"}`;
+      )}</div><h3>On the payroll · ${game.staff.length}</h3><div class="roster-scroll">${game.staff.map((p) => `<button class="staff-row" data-action="person:${p.id}"><span class="avatar" style="background:${roles[p.role].color}">♙</span><span><b>${escape(p.name)}</b><small>${roles[p.role].name} · ${p.state}</small></span><span>${Math.round(p.happy)}% ☺</span></button>`).join("") || "<p>No colleagues yet. Build a studio to get started.</p>"}</div>`;
   }
   if (tab === "research") {
     html = heading(
@@ -189,10 +213,14 @@ function renderPanel() {
       "Research & development",
       `Your researchers have generated ${game.points.toFixed(1)} available points. Hire them in an Ideas lab.`,
     );
+    html += `<div class="research-tabs">${["all", "Personnel", "Facilities", "Transport"].map((group) => button(group, "filter:" + group, group === researchGroup ? "primary" : "secondary")).join("")}</div>`;
     html += techs
+      .filter(
+        (t) => researchGroup === "all" || category(t.id) === researchGroup,
+      )
       .map((t) => {
         const done = game.tech.includes(t.id);
-        return `<article class="tech"><div><b>${done ? "✓ " : ""}${t.name}</b><small>${t.description}</small>${t.requires ? `<small>Requires: ${techs.find((q) => q.id === t.requires)!.name}</small>` : ""}</div>${button(done ? "Learned" : t.cost + " RP", "tech:" + t.id, done ? "complete" : "secondary", done || game.points < t.cost || (!!t.requires && !game.tech.includes(t.requires)))}</article>`;
+        return `<article class="tech"><div><small>${category(t.id)} · ${Math.min(t.cost, game.points).toFixed(0)}/${t.cost} RP</small><b>${done ? "✓ " : ""}${t.name}</b><small>${t.description}</small>${t.requires ? `<small>Requires: ${techs.find((q) => q.id === t.requires)!.name}</small>` : ""}</div>${button(done ? "Learned" : t.cost + " RP", "tech:" + t.id, done ? "complete" : "secondary", done || game.points < t.cost || (!!t.requires && !game.tech.includes(t.requires)))}</article>`;
       })
       .join("");
   }
@@ -218,7 +246,7 @@ function renderPanel() {
       "The company books",
       "Operating profit = button revenue minus wages and other running costs. Investments and objective rewards are shown separately.",
     );
-    html += `<div class="finance-total"><small>TODAY’S OPERATING PROFIT</small><strong>${money(operatingProfit(r))}</strong><span>${game.staff.filter((p) => p.role === "worker").length} button pushers · base $${economy.pressValue.toFixed(2)} / contact</span></div><div class="ledger"><span>Button revenue today</span><b>${money(r.income)}</b><span>Wages today</span><b>−${money(r.salaries)}</b><span>Other operating expenses</span><b>−${money(r.operating)}</b><strong>Operating profit / loss</strong><strong>${money(operatingProfit(r))}</strong><span>Construction, hiring & upgrades</span><b>−${money(r.construction)}</b><span>Objective rewards</span><b>+${money(r.rewards)}</b><strong>Cash movement</strong><strong>${money(operatingProfit(r) + r.rewards - r.construction)}</strong></div><p>${r.presses} contacts today · ${game.presses.toLocaleString()} lifetime<br>Lifetime button revenue ${money(game.lifetime)}<br>Actual contact values: ${[...new Set(game.rooms.filter((r) => r.type === "office").map((r) => pressValue(game, r).toFixed(2)))].map((v) => "$" + v).join(" / ") || "$" + economy.pressValue}</p><h3>Yesterday</h3><p>${yesterday ? "Revenue " + money(yesterday.income) + " · operating " + money(operatingProfit(yesterday)) : "Your first report closes at midnight."}</p><h3>Daily history · operating results</h3>${game.history
+    html += `<div class="finance-total"><small>TODAY’S OPERATING PROFIT</small><strong>${money(operatingProfit(r))}</strong><span>${game.staff.filter((p) => p.role === "worker").length} button pushers · base $${economy.pressValue.toFixed(2)} / contact</span></div><div class="ledger"><span>Button revenue today</span><b>${money(r.income)}</b><span>Wages today</span><b>−${money(r.salaries)}</b><span>Accountant contribution (included)</span><b>${money(r.accountant)}</b><span>Staff needs absence</span><b>${Math.round(r.absence)}s</b><span>Other operating expenses</span><b>−${money(r.operating)}</b><strong>Operating profit / loss</strong><strong>${money(operatingProfit(r))}</strong><span>Construction, hiring & upgrades</span><b>−${money(r.construction)}</b><span>Objective rewards</span><b>+${money(r.rewards)}</b><strong>Cash movement</strong><strong>${money(operatingProfit(r) + r.rewards - r.construction)}</strong></div><p>${r.presses} contacts today · ${game.presses.toLocaleString()} lifetime<br>Lifetime button revenue ${money(game.lifetime)}<br>Actual contact values: ${[...new Set(game.rooms.filter((r) => r.type === "office").map((r) => pressValue(game, r).toFixed(2)))].map((v) => "$" + v).join(" / ") || "$" + economy.pressValue}</p><h3>Yesterday</h3><p>${yesterday ? "Revenue " + money(yesterday.income) + " · operating " + money(operatingProfit(yesterday)) : "Your first report closes at midnight."}</p><h3>Daily history · operating results</h3>${game.history
       .slice()
       .reverse()
       .map(
@@ -231,7 +259,7 @@ function renderPanel() {
   }
   if (tab === "settings") {
     html = heading("TAKE A MOMENT", "Settings & field guide");
-    html += `<p><b>A little office. Big ambitions.</b></p><p>New V2 companies start with $30,000. Build two Button studios, a workshop, and hire eight button pushers plus one IT technician and one janitor. Keep a payroll reserve. Their individual presses earn money between 08:00 and 18:00. Salaries continue overnight. The HUD shows operating profit; building costs are separate investments.</p><p>Build a workshop for IT repairs and night janitors. Amenities support morale. A lab unlocks research. Add floors, then extend the elevator before building upstairs.</p><p>Tap an occupied room to inspect it and manage its employees. Drag to pan; pinch or scroll to zoom. Use ↑ to see the top floor.</p><p>Progress saves every 10 seconds. No offline income. Audio is not included in this build.</p><p class="footnote">${saveStatus} · version 0.2.0 · V2</p><div class="two">${button("Save now", "save", "primary")}${button("New V2 company", "reset")}</div>`;
+    html += `<p><b>A little office. Big ambitions.</b></p><p>New V3 companies start with $30,000. Build two Button studios, a workshop, and hire eight button pushers plus one IT technician and one janitor. Keep a payroll reserve. Their individual presses earn money between 08:00 and 18:00. Salaries continue overnight. The HUD shows operating profit; building costs are separate investments.</p><p>Research Indoor plumbing (8 RP) and Lunch on site (18 RP) to keep needs trips inside your tower. Four researchers fit in each Ideas lab. Supervisors and HR must travel to workers; their presence alone gives no bonus.</p><p>Build a workshop for IT repairs and night janitors. Amenities support morale. A lab unlocks research. Add floors, then extend the elevator before building upstairs.</p><p>Tap an occupied room to inspect it and manage its employees. Drag to pan; pinch or scroll to zoom. Use ↑ to see the top floor.</p><p>Progress saves every 10 seconds. No offline income. Audio is not included in this build.</p><p class="footnote">${saveStatus} · version 0.3.0 · V3</p><div class="two">${button("Save now", "save", "primary")}${button("New V3 company", "reset")}</div>`;
   }
   if (tab === "room") {
     const r = game.rooms.find((r) => r.id === selected);
@@ -243,20 +271,36 @@ function renderPanel() {
     const people = game.staff.filter((p) => p.room === r.id);
     html = heading(
       `FLOOR ${r.floor + 1} · SUITE ${r.slot + 1}`,
-      rooms[r.type].name,
+      r.type === "office"
+        ? ["Standard studio", "Deluxe studio", "Advanced studio"][r.level - 1]
+        : rooms[r.type].name,
       rooms[r.type].description,
     );
-    html += `<p class="inspection">Revenue today: <b>${money(r.todayIncome)}</b> · Overall productivity: <b>${Math.round((100 * people.filter((p) => p.role === "worker").reduce((n, p) => n + productivity(game, p), 0)) / Math.max(1, people.filter((p) => p.role === "worker").length))}%</b><br>Bins: ${r.waste.map((v, i) => "Desk " + (i + 1) + ": " + Math.round(v) + "/" + economy.binCapacity).join(" · ")}<br>${r.broken.length ? r.broken.map((d) => "Computer " + (d + 1) + " broken").join(" · ") : "All equipment operational"}</p><div class="room-stats"><span>Tier <b>${r.level}</b></span><span>Bin capacity <b>${economy.binCapacity}</b></span><span>Faults <b>${r.broken.length}</b></span></div><div class="two">${r.type === "office" ? button("Upgrade · " + money(economy.upgradeCost * r.level), "upgrade:" + r.id) : ""}${button("Demolish · 35% refund", "demolish:" + r.id)}</div><h3>Assigned colleagues · ${people.length}/${rooms[r.type].capacity}</h3>${people.map((p) => `<button class="staff-row" data-action="person:${p.id}"><span class="avatar" style="background:${roles[p.role].color}">♙</span><span><b>${escape(p.name)} · Lv.${p.level}</b><small>${p.state} · ${Math.round(p.happy)}% happiness</small></span><span>→</span></button>`).join("")}${Object.entries(
-      roles,
-    )
-      .filter(([, d]) => d.room === r.type)
+    html += `<div class="room-toolbar">${Object.entries(roles)
+      .filter(([role]) => compatible(role as Role, r.type))
       .map(([role, d]) =>
         button(
           "Hire " + d.name + " · $" + d.cost,
           "hireRoom:" + role + ":" + r.id,
+          "primary",
+          people.length >= rooms[r.type].capacity,
         ),
       )
-      .join("")}`;
+      .join(
+        "",
+      )}${r.type === "office" ? button("Upgrade studio · " + money(economy.upgradeCost * r.level), "upgrade:" + r.id, "secondary", r.level >= 3 || !game.tech.includes(r.level === 1 ? "desks" : "deluxe")) : ""}<small>${people.length} occupied · ${rooms[r.type].capacity - people.length} available desks</small></div><p class="inspection">Revenue today: <b>${money(r.todayIncome)}</b> · Overall productivity: <b>${Math.round((100 * people.filter((p) => p.role === "worker").reduce((n, p) => n + productivity(game, p), 0)) / Math.max(1, people.filter((p) => p.role === "worker").length))}%</b><br>Bins: ${r.waste.map((v, i) => "Desk " + (i + 1) + ": " + Math.round(v) + "/" + economy.binCapacity).join(" · ")}<br>${r.broken.length ? r.broken.map((d) => "Computer " + (d + 1) + " broken").join(" · ") : "All equipment operational"}</p><div class="room-stats"><span>Tier <b>${r.level}</b></span><span>Bin capacity <b>${economy.binCapacity}</b></span><span>Faults <b>${r.broken.length}</b></span></div><div class="two">${r.type === "office" ? button("Upgrade · " + money(economy.upgradeCost * r.level), "upgrade:" + r.id) : ""}${button("Demolish · 35% refund", "demolish:" + r.id)}</div><h3>Assigned colleagues · ${people.length}/${rooms[r.type].capacity}</h3>${people.map((p) => `<button class="staff-row" data-action="person:${p.id}"><span class="avatar" style="background:${roles[p.role].color}">♙</span><span><b>${escape(p.name)} · Lv.${p.level}</b><small>${p.state} · ${Math.round(p.happy)}% happiness</small></span><span>→</span></button>`).join("")}`;
+    html += `<h3>Room improvements</h3><div class="two">${Object.entries(
+      decorations,
+    )
+      .map(([id, d]) =>
+        button(
+          d.name + " +" + d.happy + " morale · $" + d.cost,
+          "decor:" + r.id + ":" + id,
+          "secondary",
+          !game.tech.includes("decor") || r.decor.includes(id),
+        ),
+      )
+      .join("")}</div>`;
   }
   if (tab.startsWith("person:")) {
     const p = game.staff.find((p) => p.id === Number(tab.split(":")[1]));
@@ -266,9 +310,53 @@ function renderPanel() {
       return;
     }
     html = heading(roles[p.role].name.toUpperCase(), escape(p.name));
-    html += `<div class="profile"><span class="avatar" style="background:${roles[p.role].color}">♙</span><h3>Level ${p.level} · ${Math.round(p.happy)}% happy</h3><p>${p.state}${p.task ? "<br>Floor " + (game.rooms.find((r) => r.id === p.task!.room)!.floor + 1) + " · desk " + (p.task.desk + 1) + " · " + p.task.progress.toFixed(1) + " seconds" : ""}</p><p>Assigned: floor ${game.rooms.find((r) => r.id === p.room)!.floor + 1}, suite ${game.rooms.find((r) => r.id === p.room)!.slot + 1}, desk ${p.desk + 1}<br>Condition: ${game.rooms.find((r) => r.id === p.room)!.broken.includes(p.desk) ? "Computer broken" : "Ready"}<br>Salary ${money(roles[p.role].salary * (1 + (p.level - 1) * 0.45))}/day<br>Personal button presses: ${p.presses}<br>Productivity: ${Math.round(productivity(game, p) * 100)}%</p></div><div class="two">${button("Promote · $" + p.level * economy.promotionCost, "promote:" + p.id)}${button("Dismiss employee", "dismiss:" + p.id)}</div>`;
+    html += `<div class="employee-actions">${button("Promote · $" + p.level * economy.promotionCost, "promote:" + p.id, "primary", p.level >= 3 || !game.tech.includes("promote"))}${button("Relocate / swap", "move:" + p.id)}</div><div class="needs">${[
+      ["Toilet need", p.toilet],
+      ["Hunger", p.hunger],
+      ["Energy", p.energy],
+      ["Happiness", p.happy],
+    ]
+      .map(
+        ([label, value]) =>
+          `<label>${label} <b>${Math.round(Number(value))}%</b><progress max="100" value="${value}"></progress></label>`,
+      )
+      .join(
+        "",
+      )}<p>${p.boost > 0 ? "Motivated! " + Math.ceil(p.boost) + "s remaining" : ""}</p></div><div class="profile"><span class="avatar" style="background:${roles[p.role].color}">♙</span><h3>Level ${p.level} · ${Math.round(p.happy)}% happy</h3><p>${p.state}${p.task ? "<br>Floor " + (game.rooms.find((r) => r.id === p.task!.room)!.floor + 1) + " · desk " + (p.task.desk + 1) + " · " + p.task.progress.toFixed(1) + " seconds" : ""}</p><p>Assigned: floor ${game.rooms.find((r) => r.id === p.room)!.floor + 1}, suite ${game.rooms.find((r) => r.id === p.room)!.slot + 1}, desk ${p.desk + 1}<br>Condition: ${game.rooms.find((r) => r.id === p.room)!.broken.includes(p.desk) ? "Computer broken" : "Ready"}<br>Salary ${money(roles[p.role].salary * (1 + (p.level - 1) * 0.45))}/day<br>Personal button presses: ${p.presses}<br>Productivity: ${Math.round(productivity(game, p) * 100)}%</p></div><div class="two">${button("Promote · $" + p.level * economy.promotionCost, "promote:" + p.id)}${button("Dismiss employee", "dismiss:" + p.id)}</div>`;
   }
+  if (tab.startsWith("move:")) {
+    const p = game.staff.find((p) => p.id === Number(tab.split(":")[1]));
+    if (p)
+      html =
+        heading(
+          "REORGANISE WITHOUT REHIRING",
+          "Relocate " + escape(p.name),
+          "Choose a free desk, or swap with a compatible colleague. Transfers keep salary, level and identity.",
+        ) +
+        game.rooms
+          .filter((r) => compatible(p.role, r.type))
+          .map(
+            (r) =>
+              `<h3>Floor ${r.floor + 1} · Suite ${r.slot + 1}</h3><div class="two">${Array.from(
+                { length: rooms[r.type].capacity },
+                (_, d) => {
+                  const q = game.staff.find(
+                    (q) => q.room === r.id && q.desk === d,
+                  );
+                  return button(
+                    q ? "Swap " + escape(q.name) : "Desk " + (d + 1),
+                    "transfer:" + p.id + ":" + r.id + ":" + d,
+                    "secondary",
+                    q?.id === p.id,
+                  );
+                },
+              ).join("")}</div>`,
+          )
+          .join("");
+  }
+  const scroll = panel.scrollTop;
   panel.innerHTML = html;
+  panel.scrollTop = scroll;
 }
 function escape(s: string) {
   return s.replace(
@@ -295,6 +383,11 @@ app.addEventListener("click", (e) => {
   const a = target.dataset.action;
   if (!a) return;
   const [type, arg, arg2] = a.split(":");
+  if (type === "filter") {
+    researchGroup = arg;
+    renderPanel();
+    return;
+  }
   if (type === "close") {
     tab = "";
     renderPanel();
@@ -319,8 +412,31 @@ app.addEventListener("click", (e) => {
     (el("continue") as HTMLButtonElement).disabled = !load();
     return;
   }
+  if (type === "move") {
+    tab = "move:" + arg;
+    renderPanel();
+    return;
+  }
   action(() => {
     switch (type) {
+      case "transfer":
+        if (confirm("Confirm this transfer or swap?")) {
+          const ok = relocate(
+            game,
+            Number(arg),
+            Number(arg2),
+            Number(a.split(":")[3]),
+            true,
+          );
+          game.message = ok
+            ? "Transfer confirmed."
+            : "Invalid destination or employee is riding the elevator.";
+          if (ok) tab = "person:" + arg;
+        }
+        break;
+      case "decor":
+        decorate(game, Number(arg), arg2);
+        break;
       case "floor":
         if (addFloor(game)) tower.focus(game.floors - 1);
         break;
@@ -367,7 +483,13 @@ app.addEventListener("click", (e) => {
   });
 });
 tower.onSelect = (floor, slot) => {
-  if (!started || slot < 0 || slot > 2 || floor < 0 || floor >= game.floors)
+  if (
+    !started ||
+    slot < 0 ||
+    slot >= grid.slots ||
+    floor < 0 ||
+    floor >= game.floors
+  )
     return;
   const room = game.rooms.find((r) => r.floor === floor && r.slot === slot);
   if (room) {
@@ -386,7 +508,7 @@ tower.onSelect = (floor, slot) => {
 el("zoom-in").onclick = () => tower.setZoom(tower.zoom * 1.2);
 el("zoom-out").onclick = () => tower.setZoom(tower.zoom / 1.2);
 el("home-view").onclick = () => {
-  tower.panX = 0;
+  tower.panX = (690 - grid.center) * tower.zoom;
   tower.panY = 0;
   tower.resize();
 };
@@ -412,6 +534,7 @@ function hud() {
   el("day").textContent =
     `DAY ${String(game.day).padStart(2, "0")} · ${String(Math.floor(h)).padStart(2, "0")}:${String(Math.floor((h % 1) * 60)).padStart(2, "0")}`;
   const next = [0, 1, 2, 3, 15, 4, 7, 8, 5, 6, 9, 10, 11, 12, 13, 14]
+    .concat(Array.from({ length: objectives.length - 16 }, (_, i) => i + 16))
     .map((i) => ({ o: objectives[i], i }))
     .find(({ i }) => !game.claimed.includes(i))?.o;
   el("goal").textContent = next ? next[0] : "A company worth working for";

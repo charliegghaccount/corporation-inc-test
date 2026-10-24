@@ -1,5 +1,10 @@
+import { updateNeeds, updateSocial } from "./needs";
 import {
   rooms,
+  grid,
+  compatible,
+  decorations,
+  facilityUnlock,
   roles,
   techs,
   economy,
@@ -16,6 +21,7 @@ export interface Room {
   broken: number[];
   waste: number[];
   todayIncome: number;
+  decor: string[];
 }
 export interface Person {
   id: number;
@@ -31,6 +37,19 @@ export interface Person {
   timer: number;
   presses: number;
   breakTime: number;
+  toilet: number;
+  hunger: number;
+  energy: number;
+  visit: {
+    kind: "toilet" | "hunger" | "energy";
+    room: number | null;
+    seat: number;
+    progress: number;
+    phase: "travel" | "use" | "return";
+  } | null;
+  social: { target: number; progress: number; acted?: boolean } | null;
+  boost: number;
+  hrCooldown: number;
   desk: number;
   direction: number;
   cycle: number;
@@ -51,9 +70,18 @@ export interface Ledger {
   operating: number;
   operatingNet: number;
   presses: number;
+  accountant: number;
+  absence: number;
 }
 export interface Game {
-  version: 2;
+  version: 3;
+  stats: {
+    wc: number;
+    food: number;
+    gym: number;
+    motivated: number;
+    hr: number;
+  };
   name: string;
   cash: number;
   time: number;
@@ -87,9 +115,12 @@ export const ledger = (day: number): Ledger => ({
   operating: 0,
   operatingNet: 0,
   presses: 0,
+  accountant: 0,
+  absence: 0,
 });
 export const fresh = (name = "Good Company"): Game => ({
-  version: 2,
+  version: 3,
+  stats: { wc: 0, food: 0, gym: 0, motivated: 0, hr: 0 },
   name: name.slice(0, 28) || "Good Company",
   cash: economy.startingCash,
   time: (7 / 24) * 240,
@@ -134,13 +165,20 @@ export function build(g: Game, type: RoomType, floor: number, slot: number) {
     !Number.isInteger(floor) ||
     !Number.isInteger(slot) ||
     slot < 0 ||
-    slot > 2 ||
+    slot >= grid.slots ||
     floor < 0 ||
     floor >= g.floors ||
     floor > g.liftTop ||
     g.rooms.some((r) => r.floor === floor && r.slot === slot)
   ) {
     g.message = "Choose an empty connected building plot.";
+    return false;
+  }
+  if (facilityUnlock[type] && !g.tech.includes(facilityUnlock[type]!)) {
+    g.message =
+      "Research " +
+      techs.find((t) => t.id === facilityUnlock[type])!.name +
+      " first.";
     return false;
   }
   if (!spend(g, rooms[type].cost)) return false;
@@ -154,6 +192,7 @@ export function build(g: Game, type: RoomType, floor: number, slot: number) {
     broken: [],
     waste: [0, 0, 0, 0],
     todayIncome: 0,
+    decor: [],
   });
   g.message = rooms[type].name + " is open for business.";
   return true;
@@ -183,7 +222,7 @@ export function hire(g: Game, role: Role, preferred?: number) {
   const r = g.rooms.find(
     (r) =>
       (preferred === undefined || r.id === preferred) &&
-      r.type === def.room &&
+      compatible(role, r.type) &&
       g.staff.filter((p) => p.room === r.id).length < rooms[r.type].capacity,
   );
   if (!r) {
@@ -220,6 +259,13 @@ export function hire(g: Game, role: Role, preferred?: number) {
     targetFloor: r.floor,
     timer: 0,
     presses: 0,
+    toilet: 15 + (id % 29),
+    hunger: 10 + ((id * 7) % 35),
+    energy: 85 + (id % 15),
+    visit: null,
+    social: null,
+    boost: 0,
+    hrCooldown: 0,
     breakTime: 0,
     desk:
       [0, 1, 2, 3].find(
@@ -370,6 +416,70 @@ export const objectives = [
     100,
     (g: Game) => g.history.some((r) => operatingProfit(r) > 0),
   ],
+
+  [
+    "Wide ambitions",
+    "Build rooms in all five positions",
+    200,
+    (g: Game) =>
+      [0, 1, 2, 3, 4].every((s) => g.rooms.some((r) => r.slot === s)),
+  ],
+  [
+    "Discovery team",
+    "Assign four researchers to one lab",
+    150,
+    (g: Game) =>
+      g.rooms.some(
+        (r) =>
+          r.type === "research" &&
+          g.staff.filter((p) => p.room === r.id).length === 4,
+      ),
+  ],
+  [
+    "Indoor comfort",
+    "Research and build a restroom",
+    100,
+    (g: Game) => g.rooms.some((r) => r.type === "restroom"),
+  ],
+  [
+    "A shorter trip",
+    "Use an on-site restroom",
+    100,
+    (g: Game) => g.stats.wc > 0,
+  ],
+  ["Lunch together", "Use a cafeteria", 100, (g: Game) => g.stats.food > 0],
+  [
+    "Team spirit",
+    "Motivate an employee",
+    150,
+    (g: Game) => g.stats.motivated > 0,
+  ],
+  ["A helping hand", "Receive HR support", 100, (g: Game) => g.stats.hr > 0],
+  ["Healthy habits", "Exercise in a gym", 100, (g: Game) => g.stats.gym > 0],
+  [
+    "Personal touches",
+    "Buy a decoration",
+    100,
+    (g: Game) => g.rooms.some((r) => r.decor.length > 0),
+  ],
+  [
+    "Seasoned team",
+    "Promote five employees",
+    150,
+    (g: Game) => g.staff.filter((p) => p.level > 1).length >= 5,
+  ],
+  [
+    "Careful accounts",
+    "Employ a working accountant",
+    100,
+    (g: Game) => g.report.accountant > 0,
+  ],
+  [
+    "Profitable skyline",
+    "Operate a profitable five-floor company",
+    200,
+    (g: Game) => g.floors >= 5 && g.history.some((r) => r.operatingNet > 0),
+  ],
 ] as const;
 export function claimObjectives(g: Game) {
   objectives.forEach((o, i) => {
@@ -398,19 +508,14 @@ export const pressValue = (g: Game, r: Room) =>
   economy.pressValue *
   (1 + (r.level - 1) * 0.45) *
   (g.tech.includes("keys") ? 1.2 : 1) *
-  (g.staff.some((p) => p.role === "accountant") ? 1.08 : 1);
+  (1 + accountingBonus(g));
 export const productivity = (g: Game, p: Person) => {
   const r = g.rooms.find((r) => r.id === p.room)!;
   return (
     (0.65 + p.happy / 285) *
     (1 + (p.level - 1) * 0.25) *
-    (g.staff.some(
-      (q) =>
-        q.role === "supervisor" &&
-        g.rooms.find((r) => r.id === q.room)?.floor === r.floor,
-    )
-      ? 1.15
-      : 1)
+    (p.boost > 0 ? (g.tech.includes("motivation") ? 1.25 : 1.15) : 1) *
+    (0.88 + (0.12 * p.energy) / 100)
   );
 };
 export const operatingProfit = (r: Ledger) =>
@@ -483,14 +588,16 @@ function assignTask(g: Game, p: Person) {
 }
 function elevator(g: Game, dt: number) {
   const l = g.lift,
-    cap = g.tech.includes("lift") ? 6 : 3;
+    cap = g.tech.includes("liftcap") ? 9 : g.tech.includes("lift") ? 6 : 3;
   l.passengers = l.passengers.filter((id) => g.staff.some((p) => p.id === id));
   if (Math.abs(l.y - l.target) > 0.0001) {
     l.y +=
       Math.sign(l.target - l.y) *
       Math.min(
         Math.abs(l.target - l.y),
-        dt * (g.tech.includes("lift") ? 1.2 : 0.65),
+        dt *
+          (g.tech.includes("lift") ? 1.2 : 0.65) *
+          (g.tech.includes("liftspeed") ? 1.35 : 1),
       );
     for (const id of l.passengers) {
       const p = g.staff.find((p) => p.id === id)!;
@@ -542,6 +649,21 @@ export function tick(g: Game, dt: number) {
     g.cash -= wages;
     g.report.salaries += wages;
     const active = p.role === "janitor" ? hour(g) >= 18 || hour(g) < 7 : work;
+    p.boost = Math.max(0, p.boost - dt);
+    p.hrCooldown = Math.max(0, p.hrCooldown - dt);
+    if (updateNeeds(g, p, dt, active)) {
+      g.report.absence += dt;
+      p.cycle = 0;
+      continue;
+    }
+    if (
+      active &&
+      (p.role === "supervisor" || p.role === "hr") &&
+      updateSocial(g, p, dt)
+    ) {
+      p.cycle = 0;
+      continue;
+    }
     if (!active) {
       p.timer = 0;
       p.cycle = 0;
@@ -597,9 +719,19 @@ export function tick(g: Game, dt: number) {
     );
     const happyTarget = Math.max(
       35,
-      76 +
+      76 -
+        Math.min(
+          10,
+          Math.max(0, p.toilet - 80) * 0.15 +
+            Math.max(0, p.hunger - 80) * 0.15 +
+            Math.max(0, 40 - p.energy) * 0.1,
+        ) +
         comfort +
-        (g.staff.some((q) => q.role === "hr") ? 5 : 0) +
+        home.decor.reduce(
+          (n, d) =>
+            n + (decorations[d as keyof typeof decorations]?.happy || 0),
+          0,
+        ) +
         (g.tech.includes("comfort") ? 10 : 0) +
         (home.level - 1) * 4 -
         Math.min(15, overflow * 0.12) -
@@ -618,7 +750,11 @@ export function tick(g: Game, dt: number) {
     if (p.task) {
       p.state =
         p.task.kind === "repair" ? "Repairing computer" : "Emptying bin";
-      p.task.progress += dt * special * (1 + (p.level - 1) * 0.25);
+      p.task.progress +=
+        dt *
+        special *
+        (1 + (p.level - 1) * 0.25) *
+        (home.type === "it" || home.type === "cleaning" ? 1.25 : 1);
       const duration =
         p.task.kind === "repair" ? economy.repairSeconds : economy.cleanSeconds;
       if (p.task.progress >= duration) {
@@ -652,6 +788,7 @@ export function tick(g: Game, dt: number) {
         g.cash += value;
         g.lifetime += value;
         g.report.income += value;
+        g.report.accountant += value - value / (1 + accountingBonus(g));
         home.todayIncome += value;
         home.waste[p.desk] = Math.min(
           economy.binCapacity * 2,
@@ -675,12 +812,16 @@ export function tick(g: Game, dt: number) {
       }
       if (p.cycle >= 1) {
         p.cycle -= 1;
-        if (p.presses > 0 && p.presses % 30 === 0) p.breakTime = 8;
       }
     } else if (p.role === "researcher") {
       p.state = "Researching";
-      g.points += dt * 0.12 * productivity(g, p) * special;
-    } else p.state = "Supporting team";
+      g.points +=
+        dt *
+        0.12 *
+        productivity(g, p) *
+        special *
+        (g.tech.includes("lab") ? 1.25 : 1);
+    } else p.state = p.role === "accountant" ? "Accounting" : "Supporting team";
   }
   for (const r of g.rooms) {
     r.dirt = Math.min(
@@ -718,6 +859,104 @@ export function tick(g: Game, dt: number) {
     for (const r of g.rooms) r.todayIncome = 0;
   }
 }
+
+export function route(
+  g: Game,
+  p: Person,
+  floor: number,
+  x: number,
+  dt: number,
+) {
+  if (g.lift.passengers.includes(p.id)) return false;
+  p.targetFloor = floor;
+  if (p.floor !== floor) {
+    p.cycle = 0;
+    p.state = move(p, 335, dt) ? "Waiting for elevator" : "Walking to elevator";
+    return false;
+  }
+  if (!move(p, x, dt)) {
+    p.state = "Walking";
+    return false;
+  }
+  return true;
+}
+export function accountingBonus(g: Game) {
+  return Math.min(
+    0.16,
+    g.staff
+      .filter(
+        (p) =>
+          p.role === "accountant" &&
+          p.state === "Accounting" &&
+          !p.visit &&
+          working(g),
+      )
+      .reduce(
+        (n, p) =>
+          n +
+          0.04 *
+            (1 + (p.level - 1) * 0.25) *
+            (g.rooms.find((r) => r.id === p.room)?.type === "accounting"
+              ? 1.5
+              : 1),
+        0,
+      ),
+  );
+}
+export function decorate(g: Game, id: number, kind: string) {
+  const r = g.rooms.find((r) => r.id === id),
+    d = decorations[kind as keyof typeof decorations];
+  if (!r || !d || !g.tech.includes("decor") || r.decor.includes(kind))
+    return false;
+  if (!spend(g, d.cost)) return false;
+  r.decor.push(kind);
+  return true;
+}
+export function relocate(
+  g: Game,
+  id: number,
+  roomId: number,
+  desk: number,
+  swap = false,
+) {
+  const p = g.staff.find((p) => p.id === id),
+    r = g.rooms.find((r) => r.id === roomId);
+  if (
+    !p ||
+    !r ||
+    !compatible(p.role, r.type) ||
+    r.floor > g.liftTop ||
+    desk < 0 ||
+    desk >= rooms[r.type].capacity ||
+    !Number.isInteger(desk) ||
+    g.lift.passengers.includes(id)
+  )
+    return false;
+  const other = g.staff.find((q) => q.room === roomId && q.desk === desk);
+  if (other) {
+    if (
+      !swap ||
+      other.id === id ||
+      !compatible(other.role, g.rooms.find((r) => r.id === p.room)!.type) ||
+      g.lift.passengers.includes(other.id)
+    )
+      return false;
+    other.room = p.room;
+    other.desk = p.desk;
+    other.task = null;
+    other.visit = null;
+    other.social = null;
+    other.cycle = 0;
+  }
+  p.room = roomId;
+  p.desk = desk;
+  p.task = null;
+  p.visit = null;
+  p.social = null;
+  p.cycle = 0;
+  p.state = "Walking";
+  return true;
+}
 export function restore(raw: string): Game | null {
   try {
     const g = JSON.parse(raw);
@@ -748,6 +987,44 @@ export function restore(raw: string): Game | null {
       g.message =
         "V1 company migrated to V2. Cash and progress preserved; past income includes legacy rewards. Start a new V2 company for the new $30,000 budget.";
     }
+    if (g?.version === 2) {
+      g.version = 3;
+      g.stats = { wc: 0, food: 0, gym: 0, motivated: 0, hr: 0 };
+      for (const r of g.rooms) {
+        r.decor = [];
+        if (
+          ["restroom", "cafeteria", "gym"].includes(r.type) &&
+          facilityUnlock[r.type as RoomType] &&
+          !g.tech.includes(facilityUnlock[r.type as RoomType])
+        )
+          g.tech.push(facilityUnlock[r.type as RoomType]);
+      }
+      for (const p of g.staff)
+        Object.assign(p, {
+          toilet: 15 + (p.id % 29),
+          hunger: 10 + ((p.id * 7) % 35),
+          energy: 90,
+          visit: null,
+          social: null,
+          boost: 0,
+          hrCooldown: 0,
+        });
+      for (const r of [g.report, ...g.history]) {
+        r.accountant = 0;
+        r.absence = 0;
+      }
+    }
+    if (
+      !g.stats ||
+      ![
+        g.stats.wc,
+        g.stats.food,
+        g.stats.gym,
+        g.stats.motivated,
+        g.stats.hr,
+      ].every(Number.isFinite)
+    )
+      return null;
     const base = fresh();
     if (!g || typeof g !== "object") return null;
     for (const [key, value] of Object.entries(base)) {
@@ -769,6 +1046,8 @@ export function restore(raw: string): Game | null {
         "operating",
         "operatingNet",
         "presses",
+        "accountant",
+        "absence",
       ].every((k) => Number.isFinite(r[k as keyof Ledger]));
     if (
       !ledgerOK(g.report) ||
@@ -793,7 +1072,7 @@ export function restore(raw: string): Game | null {
     )
       return null;
     if (
-      g.version !== 2 ||
+      g.version !== 3 ||
       !Array.isArray(g.rooms) ||
       !Array.isArray(g.staff) ||
       !Array.isArray(g.tech) ||
@@ -808,6 +1087,8 @@ export function restore(raw: string): Game | null {
       return null;
     for (const r of g.rooms)
       if (
+        !Array.isArray(r.decor) ||
+        !r.decor.every((d: string) => d in decorations) ||
         !Array.isArray(r.waste) ||
         r.waste.length !== 4 ||
         !r.waste.every((v: number) => Number.isFinite(v) && v >= 0) ||
@@ -825,7 +1106,7 @@ export function restore(raw: string): Game | null {
         r.floor >= g.floors ||
         r.floor < 0 ||
         r.slot < 0 ||
-        r.slot > 2
+        r.slot >= grid.slots
       )
         return null;
     for (const p of g.staff)
@@ -842,6 +1123,16 @@ export function restore(raw: string): Game | null {
           p.breakTime,
           p.targetFloor,
         ].every(Number.isFinite) ||
+        ![p.toilet, p.hunger, p.energy, p.boost, p.hrCooldown].every(
+          Number.isFinite,
+        ) ||
+        (p.visit !== null &&
+          (!["toilet", "hunger", "energy"].includes(p.visit.kind) ||
+            !["travel", "use", "return"].includes(p.visit.phase) ||
+            !Number.isFinite(p.visit.progress) ||
+            !Number.isInteger(p.visit.seat) ||
+            (p.visit.room !== null &&
+              !g.rooms.some((r: Room) => r.id === p.visit.room)))) ||
         !Number.isInteger(p.desk) ||
         p.desk < 0 ||
         p.desk > 3 ||
